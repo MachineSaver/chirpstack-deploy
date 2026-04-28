@@ -1,0 +1,37 @@
+# ChirpStack Gateway Bridge — Basics Station (LNS WebSocket) mode
+# Listens on TCP port 3001
+
+[backend]
+  type="basic_station"
+
+  [backend.basic_station]
+    bind="0.0.0.0:3001"
+    # Set to true and provide cert/key to enable wss:// (TLS)
+    tls_cert=""
+    tls_key=""
+    ca_cert=""
+    # Ping interval to keep WebSocket connections alive
+    ping_interval="1m0s"
+    # Read timeout — close connection if no message received
+    read_timeout="1m5s"
+    # CA for verifying gateway client certificates (leave blank to skip)
+    stats_interval="30s"
+
+[integration]
+  marshaler="protobuf"
+
+  [integration.mqtt]
+    event_topic_template="{{ .RegionConfigID }}/gateway/{{ .GatewayID }}/event/{{ .EventType }}"
+    state_topic_template="{{ .RegionConfigID }}/gateway/{{ .GatewayID }}/state/{{ .StateType }}"
+    command_topic_template="{{ .RegionConfigID }}/gateway/{{ .GatewayID }}/command/#"
+
+    [integration.mqtt.auth]
+      type="generic"
+
+      [integration.mqtt.auth.generic]
+        server="tcp://mosquitto:1883"
+        username=""
+        password=""
+
+[meta_data]
+  [meta_data.static]

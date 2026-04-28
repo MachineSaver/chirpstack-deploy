@@ -1,0 +1,24 @@
+# Generated secrets and credentials
+.env
+config/mosquitto/passwd
+
+# SSL certificates and keys
+certs/
+config/nginx/nginx.conf
+
+# Generated ChirpStack config (rendered from template)
+config/chirpstack/chirpstack.toml
+config/chirpstack/region.toml
+
+# Docker volumes (if bind-mounted locally)
+data/
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Editor
+.vscode/
+.idea/
+*.swp
+*.swo

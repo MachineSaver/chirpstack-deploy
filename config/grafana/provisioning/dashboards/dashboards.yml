@@ -1,0 +1,11 @@
+apiVersion: 1
+
+providers:
+  - name: ChirpStack
+    orgId: 1
+    type: file
+    disableDeletion: false
+    updateIntervalSeconds: 30
+    allowUiUpdates: true
+    options:
+      path: /etc/grafana/provisioning/dashboard-files

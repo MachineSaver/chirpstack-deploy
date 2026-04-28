@@ -1,0 +1,29 @@
+# ChirpStack Gateway Bridge — Semtech UDP Packet Forwarder mode
+# Listens on UDP port 1700
+
+[backend]
+  type="semtech_udp"
+
+  [backend.semtech_udp]
+    udp_bind="0.0.0.0:1700"
+
+[integration]
+  marshaler="protobuf"
+
+  [integration.mqtt]
+    event_topic_template="{{ .RegionConfigID }}/gateway/{{ .GatewayID }}/event/{{ .EventType }}"
+    state_topic_template="{{ .RegionConfigID }}/gateway/{{ .GatewayID }}/state/{{ .StateType }}"
+    command_topic_template="{{ .RegionConfigID }}/gateway/{{ .GatewayID }}/command/#"
+
+    [integration.mqtt.auth]
+      type="generic"
+
+      [integration.mqtt.auth.generic]
+        # These values are overridden at runtime via environment variables
+        # INTEGRATION__MQTT__AUTH__GENERIC__SERVER etc.
+        server="tcp://mosquitto:1883"
+        username=""
+        password=""
+
+[meta_data]
+  [meta_data.static]
