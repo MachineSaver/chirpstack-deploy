@@ -77,7 +77,7 @@ echo "  [ok] config/nginx/nginx.conf ($([ "${SSL_ENABLED:-false}" == "true" ] &&
 # ── Render Grafana datasource (substitute env vars) ──────────────────────────
 if [[ "${ENABLE_MONITORING:-false}" == "true" ]]; then
     envsubst '${INFLUXDB_ORG} ${INFLUXDB_BUCKET} ${INFLUXDB_TOKEN}' \
-        < "$ROOT/config/grafana/provisioning/datasources/influxdb.yml" \
-        > "$ROOT/config/grafana/provisioning/datasources/influxdb.generated.yml"
-    echo "  [ok] config/grafana/provisioning/datasources/influxdb.generated.yml"
+        < "$ROOT/config/grafana/provisioning/datasources/influxdb.yml.tmpl" \
+        > "$ROOT/config/grafana/provisioning/datasources/influxdb.yml"
+    echo "  [ok] config/grafana/provisioning/datasources/influxdb.yml"
 fi

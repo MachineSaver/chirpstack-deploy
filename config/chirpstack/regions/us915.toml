@@ -29,8 +29,6 @@
     [regions.network.band]
       name="US915"
 
-    [[regions.network.extra_channels]]
-
     [regions.network.class_b]
       ping_slot_dr=8
       ping_slot_frequency=923300000
@@ -40,8 +38,5 @@
       max_count_n=0
       max_time_n=0
 
-    # Sub-band 2 mask: only channels 8-15 (indices 1 in the 8-group bitmask)
-    # This restricts to the standard 8-channel sub-band used by most US gateways
-    [[regions.network.enabled_uplink_channels]]
-      # Channels 8–15 (sub-band 2) + 65
-      channels=[8, 9, 10, 11, 12, 13, 14, 15]
+    # Sub-band 2: channels 8–15 are the standard 8-channel plan used by most US gateways
+    enabled_uplink_channels=[8, 9, 10, 11, 12, 13, 14, 15]

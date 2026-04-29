@@ -49,4 +49,3 @@ volumes:
 
 networks:
   chirpstack-net:
-    external: true

@@ -217,6 +217,7 @@ docker run --rm \
     -v "$SCRIPT_DIR/config/mosquitto:/mosquitto/config" \
     eclipse-mosquitto:2 \
     sh -c "mosquitto_passwd -b -c /mosquitto/config/passwd chirpstack '${MOSQUITTO_PASSWORD}'"
+chmod 644 config/mosquitto/passwd
 success "Mosquitto passwd file created"
 
 # ── Step 11: SSL certificate (VPS mode) ──────────────────────────────────────
@@ -269,7 +270,7 @@ $COMPOSE_CMD up -d
 info "Waiting for ChirpStack to be ready..."
 READY=false
 for i in $(seq 1 20); do
-    if docker compose exec -T chirpstack wget -qO- http://localhost:8080/health &>/dev/null; then
+    if docker compose exec -T chirpstack wget -qO- http://127.0.0.1:8070/health &>/dev/null; then
         READY=true
         break
     fi
