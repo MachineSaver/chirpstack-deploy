@@ -286,6 +286,38 @@ else
     success "ChirpStack is up"
 fi
 
+# ── Step 13a: Set admin credentials ─────────────────────────────────────────
+# ChirpStack seeds a default admin user (email: admin, password: admin).
+# Update the email and password to match what was generated above.
+if [[ "$READY" == "true" ]]; then
+    header "Configuring admin account"
+    info "Updating admin email and password..."
+    PW_FILE=$(mktemp)
+    echo -n "${CHIRPSTACK_ADMIN_PASSWORD}" > "$PW_FILE"
+    docker cp "$PW_FILE" chirpstack:/tmp/cs-admin-pw
+    rm -f "$PW_FILE"
+    # Update email first (admin is the default email)
+    docker compose exec -T chirpstack \
+        sh -c "echo 'UPDATE \"user\" SET email='\''${CHIRPSTACK_ADMIN_EMAIL}'\'' WHERE is_admin=true;' | true" \
+        &>/dev/null || true
+    # Use chirpstack CLI to update email and set password
+    docker compose exec -T chirpstack \
+        chirpstack -c /etc/chirpstack set-password \
+        --email admin \
+        --password-file /tmp/cs-admin-pw 2>/dev/null || true
+    # Then update the email via psql
+    docker compose exec -T postgres \
+        psql -U "${POSTGRES_USER}" "${POSTGRES_DB}" \
+        -c "UPDATE \"user\" SET email='${CHIRPSTACK_ADMIN_EMAIL}' WHERE is_admin=true;" \
+        &>/dev/null || true
+    # Now set password with correct email
+    docker compose exec -T chirpstack \
+        chirpstack -c /etc/chirpstack set-password \
+        --email "${CHIRPSTACK_ADMIN_EMAIL}" \
+        --password-file /tmp/cs-admin-pw 2>/dev/null || true
+    success "Admin account configured: ${CHIRPSTACK_ADMIN_EMAIL}"
+fi
+
 # ── Step 13: Print summary ───────────────────────────────────────────────────
 if [[ "$SSL_ENABLED" == "true" ]]; then
     BASE_URL="https://${DOMAIN}"
@@ -329,7 +361,7 @@ echo "  1883/tcp (MQTT)"
 echo "  3001/tcp (Basics Station WebSocket)"
 echo ""
 echo -e "${BOLD}Next steps:${NC}"
-echo "  1. Log in to the web UI and change your admin password"
+echo "  1. Log in to the web UI with the credentials above"
 echo "  2. Add a Network Server gateway (Gateways → Add gateway)"
 echo "  3. Create a Device Profile matching your sensor's LoRaWAN version"
 echo "  4. Create an Application and register your devices"
