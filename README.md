@@ -51,7 +51,7 @@ graph TB
         end
 
         subgraph DOCKER["Docker Network: chirpstack-net"]
-            CS["ChirpStack Server\n:8080 UI  :8090 API"]
+            CS["ChirpStack Server\n:8080 UI + API"]
             GB_UDP["Gateway Bridge\nUDP  :1700"]
             GB_BS["Gateway Bridge\nBasics Station"]
             MQ["Mosquitto\nMQTT Broker  :1883"]
@@ -184,8 +184,7 @@ Both modes use **identical Docker services** — only the Nginx configuration an
 │  ── NOT exposed externally ──────────────────────────────────── │
 │  :5432 (TCP) ── PostgreSQL  (internal only)                     │
 │  :6379 (TCP) ── Redis       (internal only)                     │
-│  :8080 (TCP) ── ChirpStack UI  (behind Nginx)                   │
-│  :8090 (TCP) ── ChirpStack REST API  (behind Nginx)             │
+│  :8080 (TCP) ── ChirpStack UI + REST/gRPC API  (behind Nginx)   │
 │  :3000 (TCP) ── Grafana  (behind Nginx at /grafana/)            │
 │  :8086 (TCP) ── InfluxDB  (internal only)                       │
 └─────────────────────────────────────────────────────────────────┘
@@ -219,7 +218,7 @@ The `setup.sh` script will check for Docker and exit with instructions if it is 
 
 ```bash
 # 1. Clone the repository
-git clone https://github.com/yourorg/chirpstack-deploy.git
+git clone https://github.com/MachineSaver/chirpstack-deploy.git
 cd chirpstack-deploy
 
 # 2. Run the setup script
@@ -255,7 +254,8 @@ flowchart TD
     P --> R
     Q --> R[docker compose up -d\nwith monitoring if enabled]
     R --> S[Wait for ChirpStack\nhealth endpoint]
-    S --> T([Print summary:\nURL, credentials,\ngateway endpoints])
+    S --> U[Set admin email + password\nvia chirpstack set-password CLI]
+    U --> T([Print summary:\nURL, credentials,\ngateway endpoints])
 ```
 
 **The six questions `setup.sh` asks:**
@@ -586,7 +586,8 @@ chirpstack-deploy/
 │   └── grafana/
 │       └── provisioning/
 │           ├── datasources/
-│           │   └── influxdb.yml          ← Auto-wires InfluxDB into Grafana
+│           │   ├── influxdb.yml.tmpl     ← Template for Grafana InfluxDB datasource
+│           │   └── influxdb.yml          ← Generated — do not edit manually
 │           ├── dashboards/
 │           │   └── dashboards.yml        ← Tells Grafana where to find dashboards
 │           └── dashboard-files/
