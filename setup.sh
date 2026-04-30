@@ -212,12 +212,13 @@ bash scripts/generate-config.sh
 
 # ── Step 10: Generate Mosquitto password file ────────────────────────────────
 info "Generating Mosquitto credentials..."
+mkdir -p "$SCRIPT_DIR/generated/mosquitto"
 # Use a temp container — avoids needing mosquitto_passwd installed on the host
 docker run --rm \
-    -v "$SCRIPT_DIR/config/mosquitto:/mosquitto/config" \
+    -v "$SCRIPT_DIR/generated/mosquitto:/mosquitto/config" \
     eclipse-mosquitto:2 \
     sh -c "mosquitto_passwd -b -c /mosquitto/config/passwd chirpstack '${MOSQUITTO_PASSWORD}'"
-chmod 644 config/mosquitto/passwd
+chmod 644 "$SCRIPT_DIR/generated/mosquitto/passwd"
 success "Mosquitto passwd file created"
 
 # ── Step 11: SSL certificate (VPS mode) ──────────────────────────────────────

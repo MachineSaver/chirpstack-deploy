@@ -35,7 +35,9 @@ services:
       GF_INSTALL_PLUGINS: ""
     volumes:
       - grafana_data:/var/lib/grafana
-      - ./config/grafana/provisioning:/etc/grafana/provisioning:ro
+      - ./config/grafana/provisioning/dashboards:/etc/grafana/provisioning/dashboards:ro
+      - ./config/grafana/provisioning/dashboard-files:/etc/grafana/provisioning/dashboard-files:ro
+      - ./generated/grafana/provisioning/datasources:/etc/grafana/provisioning/datasources:ro
     depends_on:
       influxdb:
         condition: service_healthy

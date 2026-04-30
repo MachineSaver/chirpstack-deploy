@@ -1,15 +1,6 @@
-# Generated secrets and credentials
+# Generated secrets and runtime configs (produced by setup.sh / generate-config.sh)
 .env
-config/mosquitto/passwd
-
-# SSL certificates and keys
-certs/
-config/nginx/nginx.conf
-
-# Generated configs (rendered from templates by generate-config.sh)
-config/chirpstack/chirpstack.toml
-config/chirpstack/region.toml
-config/gateway-bridge/bs.toml
+generated/
 
 # Docker volumes (if bind-mounted locally)
 data/

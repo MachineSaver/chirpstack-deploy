@@ -104,15 +104,22 @@ fi
 
 export LORA_REGION_ID EXTERNAL_MQTT_BLOCK INFLUXDB_BLOCK BS_REGION BS_FREQ_MIN BS_FREQ_MAX BS_CONCENTRATOR_BLOCK
 
+# ── Create output directories ────────────────────────────────────────────────
+mkdir -p \
+    "$ROOT/generated/chirpstack" \
+    "$ROOT/generated/gateway-bridge" \
+    "$ROOT/generated/nginx" \
+    "$ROOT/generated/grafana/provisioning/datasources"
+
 # ── Render chirpstack.toml ───────────────────────────────────────────────────
 envsubst < "$ROOT/config/chirpstack/chirpstack.toml.tmpl" \
-    > "$ROOT/config/chirpstack/chirpstack.toml"
-echo "  [ok] config/chirpstack/chirpstack.toml"
+    > "$ROOT/generated/chirpstack/chirpstack.toml"
+echo "  [ok] generated/chirpstack/chirpstack.toml"
 
 # ── Render gateway-bridge Basics Station config ──────────────────────────────
 envsubst < "$ROOT/config/gateway-bridge/bs.toml.tmpl" \
-    > "$ROOT/config/gateway-bridge/bs.toml"
-echo "  [ok] config/gateway-bridge/bs.toml (${LORA_REGION})"
+    > "$ROOT/generated/gateway-bridge/bs.toml"
+echo "  [ok] generated/gateway-bridge/bs.toml (${LORA_REGION})"
 
 # ── Copy region config + inject per-region gateway backend MQTT ──────────────
 # ChirpStack v4 requires gateway.backend.mqtt inside the [[regions]] block.
@@ -122,8 +129,8 @@ if [[ ! -f "$REGION_FILE" ]]; then
     echo "ERROR: Region config not found: $REGION_FILE" >&2
     exit 1
 fi
-cp "$REGION_FILE" "$ROOT/config/chirpstack/region.toml"
-cat >> "$ROOT/config/chirpstack/region.toml" << TOML
+cp "$REGION_FILE" "$ROOT/generated/chirpstack/region.toml"
+cat >> "$ROOT/generated/chirpstack/region.toml" << TOML
 
   [regions.gateway]
     [regions.gateway.backend]
@@ -141,7 +148,7 @@ cat >> "$ROOT/config/chirpstack/region.toml" << TOML
         tls_cert=""
         tls_key=""
 TOML
-echo "  [ok] config/chirpstack/region.toml (${LORA_REGION})"
+echo "  [ok] generated/chirpstack/region.toml (${LORA_REGION})"
 
 # ── Render nginx config ──────────────────────────────────────────────────────
 if [[ "${SSL_ENABLED:-false}" == "true" ]]; then
@@ -150,13 +157,13 @@ else
     NGINX_TMPL="$ROOT/config/nginx/http.conf.tmpl"
 fi
 envsubst '${DOMAIN} ${GATEWAY_BS_PORT}' < "$NGINX_TMPL" \
-    > "$ROOT/config/nginx/nginx.conf"
-echo "  [ok] config/nginx/nginx.conf ($([ "${SSL_ENABLED:-false}" == "true" ] && echo HTTPS || echo HTTP))"
+    > "$ROOT/generated/nginx/nginx.conf"
+echo "  [ok] generated/nginx/nginx.conf ($([ "${SSL_ENABLED:-false}" == "true" ] && echo HTTPS || echo HTTP))"
 
 # ── Render Grafana datasource (substitute env vars) ──────────────────────────
 if [[ "${ENABLE_MONITORING:-false}" == "true" ]]; then
     envsubst '${INFLUXDB_ORG} ${INFLUXDB_BUCKET} ${INFLUXDB_TOKEN}' \
         < "$ROOT/config/grafana/provisioning/datasources/influxdb.yml.tmpl" \
-        > "$ROOT/config/grafana/provisioning/datasources/influxdb.yml"
-    echo "  [ok] config/grafana/provisioning/datasources/influxdb.yml"
+        > "$ROOT/generated/grafana/provisioning/datasources/influxdb.yml"
+    echo "  [ok] generated/grafana/provisioning/datasources/influxdb.yml"
 fi
