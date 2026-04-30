@@ -14,3 +14,7 @@ Thumbs.db
 .idea/
 *.swp
 *.swo
+
+# Tool metadata
+.codex
+.claude/settings.local.json
