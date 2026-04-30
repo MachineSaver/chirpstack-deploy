@@ -48,20 +48,99 @@ else
     INFLUXDB_BLOCK=""
 fi
 
-export LORA_REGION_ID EXTERNAL_MQTT_BLOCK INFLUXDB_BLOCK
+# ── Basics Station concentrator config (region-specific) ────────────────────
+if [[ "${LORA_REGION^^}" == "US915" ]]; then
+    BS_REGION="US915"
+    BS_FREQ_MIN=902000000
+    BS_FREQ_MAX=928000000
+    # Sub-band 2: channels 8-15 (125 kHz) + channel 65 (500 kHz)
+    BS_CONCENTRATOR_BLOCK='# US915 sub-band 2: channels 8-15 (125kHz) + channel 65 (500kHz)
+[[backend.basic_station.concentrators]]
+
+  [backend.basic_station.concentrators.multi_sf]
+    frequencies=[
+      903900000,
+      904100000,
+      904300000,
+      904500000,
+      904700000,
+      904900000,
+      905100000,
+      905300000,
+    ]
+
+  [backend.basic_station.concentrators.lora_std]
+    frequency=904600000
+    bandwidth=500000
+    spreading_factor=8'
+else
+    BS_REGION="EU868"
+    BS_FREQ_MIN=863000000
+    BS_FREQ_MAX=870000000
+    # Standard EU868 8-channel plan
+    BS_CONCENTRATOR_BLOCK='# EU868 standard 8-channel plan
+[[backend.basic_station.concentrators]]
+
+  [backend.basic_station.concentrators.multi_sf]
+    frequencies=[
+      868100000,
+      868300000,
+      868500000,
+      867100000,
+      867300000,
+      867500000,
+      867700000,
+      867900000,
+    ]
+
+  [backend.basic_station.concentrators.lora_std]
+    frequency=868300000
+    bandwidth=250000
+    spreading_factor=7
+
+  [backend.basic_station.concentrators.fsk]
+    frequency=868800000'
+fi
+
+export LORA_REGION_ID EXTERNAL_MQTT_BLOCK INFLUXDB_BLOCK BS_REGION BS_FREQ_MIN BS_FREQ_MAX BS_CONCENTRATOR_BLOCK
 
 # ── Render chirpstack.toml ───────────────────────────────────────────────────
 envsubst < "$ROOT/config/chirpstack/chirpstack.toml.tmpl" \
     > "$ROOT/config/chirpstack/chirpstack.toml"
 echo "  [ok] config/chirpstack/chirpstack.toml"
 
-# ── Copy region config ───────────────────────────────────────────────────────
+# ── Render gateway-bridge Basics Station config ──────────────────────────────
+envsubst < "$ROOT/config/gateway-bridge/bs.toml.tmpl" \
+    > "$ROOT/config/gateway-bridge/bs.toml"
+echo "  [ok] config/gateway-bridge/bs.toml (${LORA_REGION})"
+
+# ── Copy region config + inject per-region gateway backend MQTT ──────────────
+# ChirpStack v4 requires gateway.backend.mqtt inside the [[regions]] block.
+# The global [gateway.backend.mqtt] in chirpstack.toml is silently ignored.
 REGION_FILE="$ROOT/config/chirpstack/regions/${LORA_REGION_ID}.toml"
 if [[ ! -f "$REGION_FILE" ]]; then
     echo "ERROR: Region config not found: $REGION_FILE" >&2
     exit 1
 fi
 cp "$REGION_FILE" "$ROOT/config/chirpstack/region.toml"
+cat >> "$ROOT/config/chirpstack/region.toml" << TOML
+
+  [regions.gateway]
+    [regions.gateway.backend]
+      enabled="mqtt"
+
+      [regions.gateway.backend.mqtt]
+        event_topic="${LORA_REGION_ID}/gateway/+/event/+"
+        state_topic="${LORA_REGION_ID}/gateway/+/state/+"
+        command_topic="${LORA_REGION_ID}/gateway/{{gateway_id}}/command/{{command_type}}"
+        server="tcp://${MOSQUITTO_USER}:${MOSQUITTO_PASSWORD}@mosquitto:1883"
+        qos=0
+        clean_session=false
+        client_id=""
+        ca_cert=""
+        tls_cert=""
+        tls_key=""
+TOML
 echo "  [ok] config/chirpstack/region.toml (${LORA_REGION})"
 
 # ── Render nginx config ──────────────────────────────────────────────────────

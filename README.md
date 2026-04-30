@@ -299,9 +299,15 @@ Port (down):    1700
 
 **Basics Station / LNS** (Kerlink, RAK Wireless, Dragino newer models):
 ```
-LNS URI:  ws://YOUR_SERVER_IP:3001    (local mode)
-          wss://YOUR_DOMAIN:3001       (VPS mode)
+Authentication: LNS   (not CUPS)
+LNS URI:        ws://YOUR_SERVER_IP:3001    (local mode)
+                wss://YOUR_DOMAIN:3001       (VPS mode)
+Server CA cert: (paste Let's Encrypt ISRG Root X1 PEM — VPS mode only)
+Gateway cert:   (leave blank — no mutual TLS required)
+Gateway key:    (leave blank)
 ```
+
+> **Note:** The Basics Station bridge sends a `ROUTER_CONFIG` to the gateway on connect. This contains the channel plan for your region (US915 sub-band 2 or EU868 standard plan), generated automatically from your `LORA_REGION` setting. If your gateway hardware uses a different sub-band or non-standard channel plan, edit `config/gateway-bridge/bs.toml.tmpl` and re-run `bash scripts/generate-config.sh`.
 
 ### Step 3 — Verify connection
 
@@ -511,14 +517,29 @@ Common causes:
 
 ### Gateway shows "never seen" in the UI
 
-1. Verify the gateway EUI in ChirpStack matches the gateway hardware exactly
-2. Check the gateway bridge logs:
-   ```bash
-   docker compose logs gateway-bridge-udp
-   docker compose logs gateway-bridge-bs
+**For Semtech UDP gateways:**
+1. Confirm firewall allows UDP 1700: `ufw allow 1700/udp`
+2. Verify the gateway points at the correct server IP and port 1700
+3. Check bridge logs: `docker compose logs gateway-bridge-udp`
+
+**For Basics Station gateways:**
+1. Set Authentication to **LNS** (not CUPS — ChirpStack does not implement CUPS)
+2. The LNS URI must use `wss://` (not `https://`) and include the port: `wss://YOUR_DOMAIN:3001`
+3. If using a VPS with Let's Encrypt, paste the **ISRG Root X1** CA certificate into the Server CA cert field
+4. Confirm firewall allows TCP 3001: `ufw allow 3001/tcp`
+5. Check bridge logs — a healthy connection looks like this:
    ```
-3. Confirm firewall allows UDP 1700 (Semtech) or TCP 3001 (Basics Station)
-4. Verify the gateway is pointing at the correct server IP/port
+   backend/basicstation: gateway connected gateway_id=...
+   backend/basicstation: gateway version received ...
+   backend/basicstation: router-config message sent to gateway
+   integration/mqtt: publishing event event=stats ...
+   ```
+   If `gateway disconnected` appears immediately after `router-config message sent`, the gateway rejected the channel plan — verify `LORA_REGION` in `.env` matches your gateway's hardware region.
+6. If logs show no connections at all, check the URI — it should be `wss://DOMAIN:3001`, not `https://`.
+
+**In both cases:**
+- Verify the gateway EUI in ChirpStack matches the hardware exactly (no colons, lowercase)
+- Check `docker compose logs chirpstack` for MQTT errors — if ChirpStack shows repeated MQTT connection failures, re-run `bash scripts/generate-config.sh` and restart: `docker compose restart chirpstack`
 
 ### Devices not joining (OTAA)
 
@@ -572,7 +593,8 @@ chirpstack-deploy/
 │   │
 │   ├── gateway-bridge/
 │   │   ├── udp.toml                      ← Semtech UDP bridge config
-│   │   └── bs.toml                       ← Basics Station bridge config
+│   │   ├── bs.toml.tmpl                  ← Basics Station bridge config template
+│   │   └── bs.toml                       ← Generated — do not edit manually
 │   │
 │   ├── mosquitto/
 │   │   ├── mosquitto.conf                ← MQTT broker config
