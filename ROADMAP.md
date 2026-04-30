@@ -1,0 +1,79 @@
+# Roadmap
+
+Planned improvements for maintainability, modularity, and production readiness.
+
+## Near Term
+
+### Add a validation script
+
+Create a single command such as `scripts/validate.sh` or `make validate` that checks the deployment before release.
+
+Suggested checks:
+
+- Shell linting for `setup.sh` and scripts.
+- YAML validation for Compose and Grafana files.
+- Render config from `.env.example` or a test fixture.
+- Run `docker compose config` for the base stack.
+- Run `docker compose -f docker-compose.yml -f docker-compose.monitoring.yml config` for the monitoring stack.
+
+### Make generated config output cleaner
+
+Separate source templates from generated runtime files more explicitly. This would reduce confusion around files such as rendered ChirpStack config, Nginx config, region config, and Grafana datasource config.
+
+Possible approaches:
+
+- Generate all runtime config into a dedicated ignored directory.
+- Keep templates tracked and mount only generated files from a known output path.
+- Add comments to generated files identifying their source template and regeneration command.
+
+### Improve release repeatability
+
+Pin production image versions more tightly instead of broad tags such as `chirpstack/chirpstack:4` and `grafana/grafana:latest`.
+
+Expected benefit: safer upgrades, easier rollback, and more predictable deployments.
+
+## Medium Term
+
+### Add GitHub issue templates
+
+If this repository is hosted on GitHub, add `.github/ISSUE_TEMPLATE/bug_report.md` and `.github/ISSUE_TEMPLATE/feature_request.md`.
+
+Expected benefit: cleaner bug reports, clearer reproduction details, and easier prioritization.
+
+### Add a lightweight CI workflow
+
+Add a GitHub Actions workflow that runs the validation script on pull requests.
+
+Expected benefit: catch deployment, template, and syntax regressions before merge.
+
+### Expand region support as a first-class module
+
+The repository currently supports US915 and EU868. Future regions should be easy to add without editing multiple unrelated files.
+
+Suggested direction:
+
+- Keep one region config per file.
+- Derive MQTT topics from the selected region.
+- Document region-specific gateway setup notes.
+- Add validation that selected region ids match available region files.
+
+### Harden operational security defaults
+
+Review exposed ports and credential handling for internet-facing deployments.
+
+Areas to consider:
+
+- Whether MQTT should be publicly exposed by default.
+- Whether Basics Station and MQTT need optional TLS/client-auth modes.
+- Whether generated credentials should be printed only once or stored in a separate local credentials note.
+- Whether file permissions for generated secrets should be stricter.
+
+## Later
+
+### Add smoke tests
+
+Create a minimal post-deployment smoke test that verifies expected services, health endpoints, Nginx routing, and optional monitoring routes.
+
+### Add upgrade documentation
+
+Document how to update container images, back up volumes, restore data, rotate credentials, and change regions safely.

@@ -2,7 +2,7 @@ services:
 
   # ── InfluxDB v2 ─────────────────────────────────────────────────────────────
   influxdb:
-    image: influxdb:2
+    image: influxdb:2.8.0
     restart: unless-stopped
     environment:
       DOCKER_INFLUXDB_INIT_MODE: setup
@@ -24,7 +24,7 @@ services:
 
   # ── Grafana ─────────────────────────────────────────────────────────────────
   grafana:
-    image: grafana/grafana:latest
+    image: grafana/grafana:13.0.1
     restart: unless-stopped
     environment:
       GF_SERVER_ROOT_URL: "%(protocol)s://%(domain)s/grafana/"

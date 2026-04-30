@@ -216,7 +216,7 @@ mkdir -p "$SCRIPT_DIR/generated/mosquitto"
 # Use a temp container — avoids needing mosquitto_passwd installed on the host
 docker run --rm \
     -v "$SCRIPT_DIR/generated/mosquitto:/mosquitto/config" \
-    eclipse-mosquitto:2 \
+    eclipse-mosquitto:2.0.22 \
     sh -c "mosquitto_passwd -b -c /mosquitto/config/passwd chirpstack '${MOSQUITTO_PASSWORD}'"
 chmod 644 "$SCRIPT_DIR/generated/mosquitto/passwd"
 success "Mosquitto passwd file created"
@@ -234,7 +234,7 @@ if [[ "$SSL_ENABLED" == "true" ]]; then
     docker run --rm \
         -v "chirpstack_certbot_certs:/etc/letsencrypt" \
         -v "chirpstack_certbot_www:/var/www/certbot" \
-        certbot/certbot certonly \
+        certbot/certbot:v5.5.0 certonly \
             --webroot \
             --webroot-path /var/www/certbot \
             --email "${SSL_EMAIL}" \
@@ -289,34 +289,43 @@ fi
 
 # ── Step 13a: Set admin credentials ─────────────────────────────────────────
 # ChirpStack seeds a default admin user (email: admin, password: admin).
-# Update the email and password to match what was generated above.
+# We update it to match the values collected above.
 if [[ "$READY" == "true" ]]; then
     header "Configuring admin account"
-    info "Updating admin email and password..."
+
+    ADMIN_OK=true
+
+    # Copy the generated password into the container; remove it when done
     PW_FILE=$(mktemp)
-    echo -n "${CHIRPSTACK_ADMIN_PASSWORD}" > "$PW_FILE"
+    printf '%s' "${CHIRPSTACK_ADMIN_PASSWORD}" > "$PW_FILE"
     docker cp "$PW_FILE" chirpstack:/tmp/cs-admin-pw
     rm -f "$PW_FILE"
-    # Update email first (admin is the default email)
-    docker compose exec -T chirpstack \
-        sh -c "echo 'UPDATE \"user\" SET email='\''${CHIRPSTACK_ADMIN_EMAIL}'\'' WHERE is_admin=true;' | true" \
-        &>/dev/null || true
-    # Use chirpstack CLI to update email and set password
-    docker compose exec -T chirpstack \
-        chirpstack -c /etc/chirpstack set-password \
-        --email admin \
-        --password-file /tmp/cs-admin-pw 2>/dev/null || true
-    # Then update the email via psql
-    docker compose exec -T postgres \
-        psql -U "${POSTGRES_USER}" "${POSTGRES_DB}" \
-        -c "UPDATE \"user\" SET email='${CHIRPSTACK_ADMIN_EMAIL}' WHERE is_admin=true;" \
-        &>/dev/null || true
-    # Now set password with correct email
-    docker compose exec -T chirpstack \
-        chirpstack -c /etc/chirpstack set-password \
-        --email "${CHIRPSTACK_ADMIN_EMAIL}" \
-        --password-file /tmp/cs-admin-pw 2>/dev/null || true
-    success "Admin account configured: ${CHIRPSTACK_ADMIN_EMAIL}"
+
+    # Set password on the seeded 'admin' account
+    if ! docker compose exec -T chirpstack \
+            chirpstack -c /etc/chirpstack set-password \
+            --email admin \
+            --password-file /tmp/cs-admin-pw; then
+        warn "Could not set admin password — account may still use the default password."
+        ADMIN_OK=false
+    fi
+
+    # Update email in the database (POSTGRES_USER/DB are always 'chirpstack' in this setup)
+    if ! docker compose exec -T postgres \
+            psql -U chirpstack chirpstack -q \
+            -c "UPDATE \"user\" SET email='${CHIRPSTACK_ADMIN_EMAIL}' WHERE is_admin=true;"; then
+        warn "Could not update admin email — account may still be reachable as 'admin'."
+        ADMIN_OK=false
+    fi
+
+    docker compose exec -T chirpstack rm -f /tmp/cs-admin-pw 2>/dev/null || true
+
+    if [[ "$ADMIN_OK" == "true" ]]; then
+        success "Admin account configured: ${CHIRPSTACK_ADMIN_EMAIL}"
+    else
+        warn "Admin setup had errors — log in as 'admin' / '${CHIRPSTACK_ADMIN_PASSWORD}'"
+        warn "Then set email to '${CHIRPSTACK_ADMIN_EMAIL}' under Profile in the web UI."
+    fi
 fi
 
 # ── Step 13: Print summary ───────────────────────────────────────────────────

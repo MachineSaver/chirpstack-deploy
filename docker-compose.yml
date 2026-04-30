@@ -2,7 +2,7 @@ services:
 
   # ── PostgreSQL ──────────────────────────────────────────────────────────────
   postgres:
-    image: postgres:15-alpine
+    image: postgres:15.17-alpine
     restart: unless-stopped
     environment:
       POSTGRES_USER: ${POSTGRES_USER}
@@ -21,7 +21,7 @@ services:
 
   # ── Redis ───────────────────────────────────────────────────────────────────
   redis:
-    image: redis:7-alpine
+    image: redis:7.4.8-alpine
     restart: unless-stopped
     command: redis-server --requirepass ${REDIS_PASSWORD} --save 900 1 --save 300 10
     volumes:
@@ -36,7 +36,7 @@ services:
 
   # ── Mosquitto MQTT Broker ───────────────────────────────────────────────────
   mosquitto:
-    image: eclipse-mosquitto:2
+    image: eclipse-mosquitto:2.0.22
     restart: unless-stopped
     ports:
       - "${MQTT_PORT:-1883}:1883"
@@ -49,7 +49,7 @@ services:
 
   # ── ChirpStack Server ───────────────────────────────────────────────────────
   chirpstack:
-    image: chirpstack/chirpstack:4
+    image: chirpstack/chirpstack:4.17.0
     restart: unless-stopped
     command: -c /etc/chirpstack
     environment:
@@ -75,7 +75,7 @@ services:
 
   # ── ChirpStack Gateway Bridge — Semtech UDP Packet Forwarder ────────────────
   gateway-bridge-udp:
-    image: chirpstack/chirpstack-gateway-bridge:4
+    image: chirpstack/chirpstack-gateway-bridge:4.1.1
     restart: unless-stopped
     ports:
       - "${GATEWAY_UDP_PORT:-1700}:1700/udp"
@@ -92,7 +92,7 @@ services:
 
   # ── ChirpStack Gateway Bridge — Basics Station (WebSocket) ─────────────────
   gateway-bridge-bs:
-    image: chirpstack/chirpstack-gateway-bridge:4
+    image: chirpstack/chirpstack-gateway-bridge:4.1.1
     restart: unless-stopped
     environment:
       INTEGRATION__MQTT__AUTH__GENERIC__SERVER: "tcp://${MOSQUITTO_USER}:${MOSQUITTO_PASSWORD}@mosquitto:1883"
@@ -107,7 +107,7 @@ services:
 
   # ── Nginx Reverse Proxy ─────────────────────────────────────────────────────
   nginx:
-    image: nginx:1.25-alpine
+    image: nginx:1.29.8-alpine
     restart: unless-stopped
     ports:
       - "${HTTP_PORT:-80}:80"
