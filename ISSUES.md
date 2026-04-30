@@ -26,21 +26,17 @@ Fix: consolidated to two commands — `chirpstack set-password` to set the passw
 
 - **Area:** `scripts/generate-config.sh`, `config/grafana/provisioning/datasources/influxdb.yml`, `docker-compose.monitoring.yml`
 - **Severity:** Medium
-- **Status:** Open
+- **Status:** Not reproducible — already resolved
 
-When monitoring is enabled, `generate-config.sh` renders `influxdb.generated.yml`, while the tracked `influxdb.yml` with `${INFLUXDB_*}` placeholders remains in the mounted provisioning directory. Grafana mounts the entire provisioning directory, so both files may be processed.
-
-Expected outcome: make datasource provisioning deterministic. Either render the mounted datasource file in place, mount only generated provisioning output, or rely on Grafana environment expansion and remove the generated duplicate.
+`docker-compose.monitoring.yml` mounts only `./generated/grafana/provisioning/datasources` into Grafana. The `config/grafana/provisioning/datasources/` directory contains only `influxdb.yml.tmpl` and is never mounted into any container, so no duplicate or unrendered file reaches Grafana.
 
 ### Docker Compose validation has not been automated
 
 - **Area:** Project workflow
 - **Severity:** Medium
-- **Status:** Open
+- **Status:** Fixed
 
-There is no committed validation command or CI workflow that renders templates and validates the merged Compose files. This increases the chance of shipping broken deployment changes.
-
-Expected outcome: add a repeatable validation path that runs shell linting, template rendering with sample values, and `docker compose config` for base and monitoring configurations.
+`scripts/validate.sh` runs shellcheck, renders all four template combinations (US915/EU868 × local/vps, with and without monitoring), YAML-lints Compose and Grafana output files, and validates `docker compose config` for both stack variants. `.github/workflows/validate.yml` runs it automatically on every push and pull request to `main`.
 
 ## Verification Notes
 
