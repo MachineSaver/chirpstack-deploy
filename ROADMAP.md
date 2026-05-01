@@ -26,12 +26,6 @@ Possible approaches:
 - Keep templates tracked and mount only generated files from a known output path.
 - Add comments to generated files identifying their source template and regeneration command.
 
-### Improve release repeatability
-
-Pin production image versions more tightly instead of broad tags such as `chirpstack/chirpstack:4` and `grafana/grafana:latest`.
-
-Expected benefit: safer upgrades, easier rollback, and more predictable deployments.
-
 ## Medium Term
 
 ### Add GitHub issue templates
@@ -57,17 +51,21 @@ Areas to consider:
 - Whether generated credentials should be printed only once or stored in a separate local credentials note.
 - Whether file permissions for generated secrets should be stricter.
 
+### Add upgrade documentation
+
+Document how to update container images, back up volumes, restore data, rotate credentials, and change regions safely. Image versions are now pinned to full semver across all Compose files and scripts, so a controlled upgrade path is the next gap.
+
 ## Later
 
 ### Add smoke tests
 
 Create a minimal post-deployment smoke test that verifies expected services, health endpoints, Nginx routing, and optional monitoring routes.
 
-### Add upgrade documentation
-
-Document how to update container images, back up volumes, restore data, rotate credentials, and change regions safely.
-
 ## Recently Completed
+
+### Pin all image versions
+
+All images across `docker-compose.yml`, `docker-compose.monitoring.yml`, and operational scripts (`renew-ssl.sh`, `backup.sh`, `restore.sh`) are now pinned to full semver tags. No image uses a broad tag such as `:4`, `:latest`, or a major-version-only pin.
 
 ### Fix gateway monitoring dashboards
 
