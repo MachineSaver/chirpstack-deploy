@@ -24,6 +24,47 @@ valid_email() {
     [[ "$1" =~ ^[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Za-z]{2,}$ ]]
 }
 
+discover_regions() {
+    REGION_IDS=()
+    REGION_NAMES=()
+    REGION_DISPLAY_NAMES=()
+
+    local dir metadata
+    while IFS='|' read -r _order region_id region_name display_name _setup_description; do
+        REGION_IDS+=("$region_id")
+        REGION_NAMES+=("$region_name")
+        REGION_DISPLAY_NAMES+=("$display_name")
+    done < <(
+        for dir in "$SCRIPT_DIR"/config/regions/*; do
+            [[ -d "$dir" ]] || continue
+            metadata="$dir/metadata.env"
+            [[ -f "$metadata" ]] || continue
+
+            REGION_ID=""
+            REGION_NAME=""
+            REGION_DISPLAY_NAME=""
+            REGION_SETUP_DESCRIPTION=""
+            REGION_MENU_ORDER=""
+            # shellcheck disable=SC1090
+            source "$metadata"
+
+            [[ -n "$REGION_ID" ]] || continue
+            [[ -n "$REGION_NAME" ]] || continue
+            [[ -n "$REGION_DISPLAY_NAME" ]] || continue
+            [[ -n "$REGION_SETUP_DESCRIPTION" ]] || continue
+            [[ -n "$REGION_MENU_ORDER" ]] || continue
+            [[ "$REGION_ID" == "$(basename "$dir")" ]] || continue
+
+            printf '%s|%s|%s|%s|%s\n' "$REGION_MENU_ORDER" "$REGION_ID" "$REGION_NAME" "$REGION_DISPLAY_NAME" "$REGION_SETUP_DESCRIPTION"
+        done | sort -n -t '|' -k1,1
+    )
+
+    if [[ "${#REGION_IDS[@]}" -eq 0 ]]; then
+        error "No valid region modules found in config/regions."
+        exit 1
+    fi
+}
+
 # ── Step 1: Prerequisites ────────────────────────────────────────────────────
 header "Checking prerequisites"
 
@@ -125,19 +166,19 @@ fi
 
 # ── Step 4: LoRa Region ──────────────────────────────────────────────────────
 header "LoRa frequency region"
-echo "  [1] US915 — Americas (915 MHz)"
-echo "  [2] EU868 — Europe   (868 MHz)"
+discover_regions
+for idx in "${!REGION_IDS[@]}"; do
+    printf '  [%d] %s\n' "$((idx + 1))" "${REGION_DISPLAY_NAMES[$idx]}"
+done
 echo ""
-read -rp "  Select [1/2]: " REGION_CHOICE
+read -rp "  Select [1-${#REGION_IDS[@]}]: " REGION_CHOICE
 
-case "$REGION_CHOICE" in
-    1) LORA_REGION="US915" ;;
-    2) LORA_REGION="EU868" ;;
-    *)
-        error "Invalid choice."
-        exit 1
-        ;;
-esac
+if [[ ! "$REGION_CHOICE" =~ ^[0-9]+$ ]] ||
+    (( REGION_CHOICE < 1 || REGION_CHOICE > ${#REGION_IDS[@]} )); then
+    error "Invalid choice."
+    exit 1
+fi
+LORA_REGION="${REGION_NAMES[$((REGION_CHOICE - 1))]}"
 success "Region: $LORA_REGION"
 
 # ── Step 5: Admin account ────────────────────────────────────────────────────

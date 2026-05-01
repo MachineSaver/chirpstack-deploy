@@ -4,16 +4,6 @@ Known bugs, behavior mismatches, and operational risks to investigate or fix.
 
 ## Open
 
-### Region support is not fully modular
-
-- **Area:** `scripts/generate-config.sh`, `config/chirpstack/regions`
-- **Severity:** Medium
-- **Status:** Open
-
-Region configs are partly file-based, but Basics Station channel-plan metadata is embedded in shell branches. Adding a new region still requires editing unrelated setup and generation logic.
-
-Proposed fix: make region metadata data-driven, derive setup choices from available region definitions, and validate every region module.
-
 ### CI should validate the full release contract
 
 - **Area:** `.github/workflows/validate.yml`, `scripts/validate.sh`
@@ -25,6 +15,14 @@ The validation workflow exists, but the project should continue tightening it ar
 Proposed fix: expand validation as new Compose variants and generated files are added.
 
 ## Closed
+
+### Region support is not fully modular
+
+- **Area:** `scripts/generate-config.sh`, `setup.sh`, `scripts/validate.sh`, `config/regions`
+- **Severity:** Medium
+- **Status:** Fixed
+
+Region configs are now module-based. Each supported region has `metadata.env`, `chirpstack.toml`, and `basics-station-concentrators.toml` under `config/regions/<region-id>/`. Setup discovers modules for the region menu, config generation loads the selected module from `LORA_REGION`, and validation renders every discovered region.
 
 ### Backup, restore, and upgrade workflow is missing
 
@@ -118,7 +116,7 @@ Fix: consolidated to two commands — `chirpstack set-password` to set the passw
 - **Severity:** Medium
 - **Status:** Fixed
 
-`scripts/validate.sh` runs shellcheck, renders all four template combinations (US915/EU868 × local/vps, with and without monitoring), YAML-lints Compose and Grafana output files, and validates `docker compose config` for both stack variants. `.github/workflows/validate.yml` runs it automatically on every push and pull request to `main`.
+`scripts/validate.sh` runs shellcheck, validates all region modules, renders local/no-monitoring and VPS/monitoring configs for every discovered region, YAML-lints Compose and Grafana output files, and validates `docker compose config` for both stack variants. `.github/workflows/validate.yml` runs it automatically on every push and pull request to `main`.
 
 ## Verification Notes
 

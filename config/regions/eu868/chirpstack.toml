@@ -1,6 +1,6 @@
 [[regions]]
 
-  # EU868 — Standard European 868 MHz band, 8 channels.
+  # EU868 - Standard European 868 MHz band, 8 channels.
   id="eu868"
   description="EU868"
 

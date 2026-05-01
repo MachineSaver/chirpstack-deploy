@@ -14,8 +14,59 @@ fi
 # shellcheck disable=SC1091
 set -a; source "$ROOT/.env"; set +a
 
-# ── Region ID (lowercase for TOML key) ──────────────────────────────────────
-LORA_REGION_ID="${LORA_REGION,,}"   # e.g. US915 → us915
+# ── Region module ───────────────────────────────────────────────────────────
+LORA_REGION_ID="${LORA_REGION,,}"   # e.g. US915 -> us915
+REGION_DIR="$ROOT/config/regions/$LORA_REGION_ID"
+REGION_METADATA="$REGION_DIR/metadata.env"
+REGION_FILE="$REGION_DIR/chirpstack.toml"
+REGION_CONCENTRATORS_FILE="$REGION_DIR/basics-station-concentrators.toml"
+
+if [[ ! -d "$REGION_DIR" ]]; then
+    echo "ERROR: Region module not found: $REGION_DIR" >&2
+    echo "       Set LORA_REGION to one of the directories in config/regions/." >&2
+    exit 1
+fi
+
+for required_file in "$REGION_METADATA" "$REGION_FILE" "$REGION_CONCENTRATORS_FILE"; do
+    if [[ ! -f "$required_file" ]]; then
+        echo "ERROR: Region module is missing required file: $required_file" >&2
+        exit 1
+    fi
+done
+
+# shellcheck disable=SC1090
+source "$REGION_METADATA"
+
+required_region_vars=(
+    REGION_ID
+    REGION_NAME
+    REGION_DISPLAY_NAME
+    REGION_SETUP_DESCRIPTION
+    REGION_MENU_ORDER
+    BS_REGION
+    BS_FREQ_MIN
+    BS_FREQ_MAX
+)
+for var_name in "${required_region_vars[@]}"; do
+    if [[ -z "${!var_name:-}" ]]; then
+        echo "ERROR: Region metadata missing required value: $var_name ($REGION_METADATA)" >&2
+        exit 1
+    fi
+done
+if [[ "$REGION_ID" != "$LORA_REGION_ID" ]]; then
+    echo "ERROR: Region metadata REGION_ID=$REGION_ID does not match directory $LORA_REGION_ID" >&2
+    exit 1
+fi
+if ! grep -Eq "id[[:space:]]*=[[:space:]]*\"${LORA_REGION_ID}\"" "$REGION_FILE"; then
+    echo "ERROR: Region TOML id does not match selected region: $REGION_FILE" >&2
+    exit 1
+fi
+if ! grep -Fq '[[backend.basic_station.concentrators]]' "$REGION_CONCENTRATORS_FILE"; then
+    echo "ERROR: Basics Station concentrator TOML has no concentrator block: $REGION_CONCENTRATORS_FILE" >&2
+    exit 1
+fi
+
+BS_CONCENTRATOR_BLOCK="$(< "$REGION_CONCENTRATORS_FILE")"
 
 # ── External MQTT block ─────────────────────────────────────────────────────
 if [[ -n "${EXTERNAL_MQTT_SERVER:-}" ]]; then
@@ -48,60 +99,6 @@ else
     INFLUXDB_BLOCK=""
 fi
 
-# ── Basics Station concentrator config (region-specific) ────────────────────
-if [[ "${LORA_REGION^^}" == "US915" ]]; then
-    BS_REGION="US915"
-    BS_FREQ_MIN=902000000
-    BS_FREQ_MAX=928000000
-    # Sub-band 2: channels 8-15 (125 kHz) + channel 65 (500 kHz)
-    BS_CONCENTRATOR_BLOCK='# US915 sub-band 2: channels 8-15 (125kHz) + channel 65 (500kHz)
-[[backend.basic_station.concentrators]]
-
-  [backend.basic_station.concentrators.multi_sf]
-    frequencies=[
-      903900000,
-      904100000,
-      904300000,
-      904500000,
-      904700000,
-      904900000,
-      905100000,
-      905300000,
-    ]
-
-  [backend.basic_station.concentrators.lora_std]
-    frequency=904600000
-    bandwidth=500000
-    spreading_factor=8'
-else
-    BS_REGION="EU868"
-    BS_FREQ_MIN=863000000
-    BS_FREQ_MAX=870000000
-    # Standard EU868 8-channel plan
-    BS_CONCENTRATOR_BLOCK='# EU868 standard 8-channel plan
-[[backend.basic_station.concentrators]]
-
-  [backend.basic_station.concentrators.multi_sf]
-    frequencies=[
-      868100000,
-      868300000,
-      868500000,
-      867100000,
-      867300000,
-      867500000,
-      867700000,
-      867900000,
-    ]
-
-  [backend.basic_station.concentrators.lora_std]
-    frequency=868300000
-    bandwidth=250000
-    spreading_factor=7
-
-  [backend.basic_station.concentrators.fsk]
-    frequency=868800000'
-fi
-
 export LORA_REGION_ID EXTERNAL_MQTT_BLOCK INFLUXDB_BLOCK BS_REGION BS_FREQ_MIN BS_FREQ_MAX BS_CONCENTRATOR_BLOCK
 
 # ── Create output directories ────────────────────────────────────────────────
@@ -119,16 +116,11 @@ echo "  [ok] generated/chirpstack/chirpstack.toml"
 # ── Render gateway-bridge Basics Station config ──────────────────────────────
 envsubst < "$ROOT/config/gateway-bridge/bs.toml.tmpl" \
     > "$ROOT/generated/gateway-bridge/bs.toml"
-echo "  [ok] generated/gateway-bridge/bs.toml (${LORA_REGION})"
+echo "  [ok] generated/gateway-bridge/bs.toml (${REGION_NAME})"
 
 # ── Copy region config + inject per-region gateway backend MQTT ──────────────
 # ChirpStack v4 requires gateway.backend.mqtt inside the [[regions]] block.
 # The global [gateway.backend.mqtt] in chirpstack.toml is silently ignored.
-REGION_FILE="$ROOT/config/chirpstack/regions/${LORA_REGION_ID}.toml"
-if [[ ! -f "$REGION_FILE" ]]; then
-    echo "ERROR: Region config not found: $REGION_FILE" >&2
-    exit 1
-fi
 cp "$REGION_FILE" "$ROOT/generated/chirpstack/region.toml"
 cat >> "$ROOT/generated/chirpstack/region.toml" << TOML
 
@@ -148,7 +140,7 @@ cat >> "$ROOT/generated/chirpstack/region.toml" << TOML
         tls_cert=""
         tls_key=""
 TOML
-echo "  [ok] generated/chirpstack/region.toml (${LORA_REGION})"
+echo "  [ok] generated/chirpstack/region.toml (${REGION_NAME})"
 
 # ── Render nginx config ──────────────────────────────────────────────────────
 if [[ "${SSL_ENABLED:-false}" == "true" ]]; then
