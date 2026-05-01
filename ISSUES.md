@@ -34,6 +34,16 @@ The stack has persistent Postgres, Redis, Mosquitto, InfluxDB, Grafana, and Cert
 
 Fix: added `scripts/backup.sh` and `scripts/restore.sh`. Backups include `.env`, generated runtime config, a PostgreSQL logical dump, and snapshots of Redis, Mosquitto, Certbot, and optional monitoring volumes. Restore requires explicit confirmation, recreates the PostgreSQL volume from the dump, restores the other archived volumes, regenerates runtime config, and starts the stack.
 
+### First-run setup could break on Mosquitto credential generation
+
+- **Area:** `setup.sh`, `docker-compose.yml`
+- **Severity:** High
+- **Status:** Fixed
+
+The Mosquitto password file was being generated through a bind mount that could resolve to a directory on the host, causing `mosquitto_passwd` to fail on clean rebuilds.
+
+Fix: setup now touches `generated/mosquitto/passwd` before invoking the temporary container and mounts the file directly at `/mosquitto/config/passwd`.
+
 ### VPS first-run may start Nginx with missing certificate files
 
 - **Area:** `setup.sh`, `config/nginx`
@@ -43,6 +53,16 @@ Fix: added `scripts/backup.sh` and `scripts/restore.sh`. Backups include `.env`,
 VPS mode rendered the HTTPS Nginx config before the initial Let's Encrypt certificate existed, then attempted to start Nginx for the ACME HTTP challenge. That could fail because the configured certificate paths were not present yet.
 
 Fix: setup now renders a temporary HTTP-only Nginx config for the ACME challenge, obtains the certificate, then re-runs `scripts/generate-config.sh` to restore the normal HTTPS config before reloading Nginx.
+
+### ACME bootstrap could fail when monitoring is enabled
+
+- **Area:** `setup.sh`, `config/nginx`
+- **Severity:** High
+- **Status:** Fixed
+
+The temporary HTTP-only Nginx config did not expose the ACME webroot path in all cases, and it could be started before upstreams referenced by the config existed.
+
+Fix: setup now renders the temporary HTTP config with the ACME challenge location, starts `gateway-bridge-bs` and Grafana when needed before Nginx, and then reloads back to the HTTPS config after Certbot succeeds.
 
 ### MQTT is exposed on the host by default
 
@@ -93,6 +113,16 @@ Fix: the Compose project name is now pinned to `chirpstack`, and renewal uses de
 The original code contained a no-op command (SQL piped to `true`), undefined shell variables (`${POSTGRES_USER}`, `${POSTGRES_DB}`), and `|| true` guards on every step so failures were invisible. The `success` message printed unconditionally.
 
 Fix: consolidated to two commands — `chirpstack set-password` to set the password on the seeded `admin` account, then a `psql` UPDATE to change the email. Both use proper `if !` error checks; failures surface a warning with fallback instructions instead of silently printing success.
+
+### Device profile provisioning was bound to a missing login endpoint
+
+- **Area:** `scripts/provision-devices.sh`, `docker-compose.yml`, `config/nginx`
+- **Severity:** High
+- **Status:** Fixed
+
+The provisioning script assumed `/api/internal/login` would authenticate a UI user, but the live stack exposed ChirpStack's REST proxy separately and the login route returned `404`.
+
+Fix: added the `chirpstack-rest-api` service, proxied `/api/` to it, switched provisioning to a ChirpStack API key, and persisted that key in `.env` so future runs reuse the same credential.
 
 ### EU868 region selection may still subscribe to US915 gateway topics
 

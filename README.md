@@ -93,6 +93,7 @@ graph TB
 | **mosquitto** | `eclipse-mosquitto:2.0.22` | Internal MQTT v5 broker. All gateway-bridge to ChirpStack communication flows through it. Host access is optional. |
 | **postgres** | `postgres:15.17-alpine` | Primary database. Stores all persistent state: devices, gateways, tenants, frame logs. |
 | **redis** | `redis:7.4.8-alpine` | Session cache, downlink queue, deduplication, distributed locks. |
+| **chirpstack-rest-api** | `ghcr.io/chirpstack/chirpstack-rest-api:4.2.0` | REST proxy for ChirpStack's gRPC API. Used by the provisioning script and proxied on `/api/`. |
 | **nginx** | `nginx:1.29.8-alpine` | Reverse proxy. Terminates SSL, routes web UI, REST API, Grafana, and Basics Station WebSocket. |
 | **influxdb** | `influxdb:2.8.0` | *(optional)* Time-series metrics database for gateway packet and device uplink traffic. |
 | **grafana** | `grafana/grafana:13.0.1` | *(optional)* Visualization dashboards, pre-wired to PostgreSQL for gateway state and InfluxDB for traffic charts. |
@@ -263,7 +264,9 @@ flowchart TD
     Q --> R[docker compose up -d\nwith monitoring if enabled]
     R --> S[Wait for ChirpStack\nhealth endpoint]
     S --> U[Set admin email + password\nvia chirpstack set-password CLI]
-    U --> T([Print summary:\nURL, credentials,\ngateway endpoints])
+    U --> V[Create and persist a\nChirpStack API key]
+    V --> W[Provision AirVibe device\nprofiles automatically]
+    W --> T([Print summary:\nURL, credentials,\ngateway endpoints])
 ```
 
 **The questions `setup.sh` asks:**
@@ -279,6 +282,8 @@ flowchart TD
 | 7 | Enable monitoring? | Grafana + InfluxDB |
 
 All passwords and secrets are **auto-generated** — you don't choose them. They are printed in the summary at the end and stored in `.env`.
+
+`setup.sh` also generates a persistent `CHIRPSTACK_API_KEY` and stores it in `.env` so `scripts/provision-devices.sh` can rerun without creating a new credential each time.
 
 If `.env` already exists, `setup.sh` exits without changing it unless you type `OVERWRITE`. When overwriting, the previous `.env` is backed up first.
 
@@ -333,6 +338,13 @@ In the ChirpStack UI, navigate to your gateway. After the gateway connects, you 
 ### Step 1 — Create a Device Profile
 
 A Device Profile defines the LoRaWAN version and regional parameters for a class of device.
+
+This repository pre-provisions the two AirVibe profiles during `setup.sh` for the selected region:
+
+- `AirVibe <REGION>`
+- `AirVibe <REGION> FUOTA`
+
+If you re-run provisioning manually, the script is idempotent and will skip profiles that already exist.
 
 1. Go to **Device Profiles → Add device profile**
 2. Key settings:
@@ -473,6 +485,7 @@ docker compose up -d --force-recreate chirpstack
 | `CHIRPSTACK_SECRET` | *(generated)* | JWT signing secret |
 | `CHIRPSTACK_ADMIN_EMAIL` | *(your input)* | Initial admin login |
 | `CHIRPSTACK_ADMIN_PASSWORD` | *(generated)* | Initial admin password |
+| `CHIRPSTACK_API_KEY` | *(generated)* | Persistent API key used by `scripts/provision-devices.sh` |
 | `EXTERNAL_MQTT_SERVER` | *(blank)* | External broker URI (optional) |
 | `EXPOSE_MQTT` | `false` | Publish Mosquitto on host port `MQTT_PORT` |
 | `ENABLE_MONITORING` | `false` | Enables Grafana + InfluxDB |

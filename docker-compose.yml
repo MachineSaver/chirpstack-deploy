@@ -73,6 +73,16 @@ services:
       retries: 8
       start_period: 30s
 
+  # ── ChirpStack REST API proxy ──────────────────────────────────────────────
+  chirpstack-rest-api:
+    image: ghcr.io/chirpstack/chirpstack-rest-api:4.2.0
+    restart: unless-stopped
+    command: --server chirpstack:8080 --bind 0.0.0.0:8090 --insecure
+    depends_on:
+      - chirpstack
+    networks:
+      - chirpstack-net
+
   # ── ChirpStack Gateway Bridge — Semtech UDP Packet Forwarder ────────────────
   gateway-bridge-udp:
     image: chirpstack/chirpstack-gateway-bridge:4.1.1
@@ -120,6 +130,8 @@ services:
     depends_on:
       chirpstack:
         condition: service_healthy
+      chirpstack-rest-api:
+        condition: service_started
     networks:
       - chirpstack-net
 

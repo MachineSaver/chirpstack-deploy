@@ -265,6 +265,7 @@ MOSQUITTO_PASSWORD=${MOSQUITTO_PASSWORD}
 CHIRPSTACK_SECRET=${CHIRPSTACK_SECRET}
 CHIRPSTACK_ADMIN_EMAIL=${CHIRPSTACK_ADMIN_EMAIL}
 CHIRPSTACK_ADMIN_PASSWORD=${CHIRPSTACK_ADMIN_PASSWORD}
+CHIRPSTACK_API_KEY=
 
 EXTERNAL_MQTT_SERVER=
 EXPOSE_MQTT=${EXPOSE_MQTT}
@@ -286,6 +287,35 @@ EOF
 
 success ".env written"
 
+# Helper to keep a generated value persisted in .env without rewriting the
+# rest of the file. If the key exists, replace it; otherwise append it.
+update_env_file() {
+    local key="$1"
+    local value="$2"
+    local tmp_file
+    tmp_file="$(mktemp)"
+
+    if grep -q "^${key}=" .env; then
+        awk -v k="$key" -v v="$value" '
+            $0 ~ "^" k "=" { print k "=" v; found=1; next }
+            { print }
+            END { if (!found) print k "=" v }
+        ' .env > "$tmp_file"
+    else
+        cat .env > "$tmp_file"
+        printf '%s=%s\n' "$key" "$value" >> "$tmp_file"
+    fi
+
+    mv "$tmp_file" .env
+}
+
+# Re-load the generated values so later steps can use fixed ports and other
+# values written into .env without hard-coding them again.
+set -a
+# shellcheck disable=SC1090
+source .env
+set +a
+
 # ── Step 10: Generate configs ────────────────────────────────────────────────
 header "Rendering configuration files"
 bash scripts/generate-config.sh
@@ -293,9 +323,10 @@ bash scripts/generate-config.sh
 # ── Step 11: Generate Mosquitto password file ────────────────────────────────
 info "Generating Mosquitto credentials..."
 mkdir -p "$SCRIPT_DIR/generated/mosquitto"
+touch "$SCRIPT_DIR/generated/mosquitto/passwd"
 # Use a temp container — avoids needing mosquitto_passwd installed on the host
 docker run --rm \
-    -v "$SCRIPT_DIR/generated/mosquitto:/mosquitto/config" \
+    -v "$SCRIPT_DIR/generated/mosquitto/passwd:/mosquitto/config/passwd" \
     eclipse-mosquitto:2.0.22 \
     sh -c "mosquitto_passwd -b -c /mosquitto/config/passwd chirpstack '${MOSQUITTO_PASSWORD}'"
 chmod 644 "$SCRIPT_DIR/generated/mosquitto/passwd"
@@ -308,8 +339,14 @@ if [[ "$SSL_ENABLED" == "true" ]]; then
 
     # Start Nginx with an HTTP-only config for first issuance. The normal HTTPS
     # config references certificate files that do not exist until Certbot runs.
+    export DOMAIN GATEWAY_BS_PORT
     envsubst '${DOMAIN} ${GATEWAY_BS_PORT}' < "$SCRIPT_DIR/config/nginx/http.conf.tmpl" \
         > "$SCRIPT_DIR/generated/nginx/nginx.conf"
+
+    if [[ "$ENABLE_MONITORING" == "true" ]]; then
+        docker compose -f docker-compose.yml -f docker-compose.monitoring.yml up -d grafana
+    fi
+    docker compose up -d gateway-bridge-bs
     docker compose up -d nginx
 
     info "Running Certbot..."
@@ -417,6 +454,25 @@ if [[ "$READY" == "true" ]]; then
     else
         warn "Admin setup had errors — log in as 'admin' / '${CHIRPSTACK_ADMIN_PASSWORD}'"
         warn "Then set email to '${CHIRPSTACK_ADMIN_EMAIL}' under Profile in the web UI."
+    fi
+
+    if [[ "$ADMIN_OK" == "true" ]]; then
+        info "Creating persistent ChirpStack API key..."
+        API_KEY_OUTPUT=$(docker compose exec -T chirpstack \
+            chirpstack -c /etc/chirpstack create-api-key \
+            --name "provision-devices" 2>/dev/null) || {
+            warn "Could not create a persistent API key."
+            ADMIN_OK=false
+        }
+
+        CHIRPSTACK_API_KEY=$(echo "$API_KEY_OUTPUT" | awk -F': ' '/^token: /{print $2; exit}')
+        if [[ -n "$CHIRPSTACK_API_KEY" ]]; then
+            update_env_file "CHIRPSTACK_API_KEY" "$CHIRPSTACK_API_KEY"
+            success "Persistent API key stored in .env"
+        else
+            warn "API key creation did not return a token."
+            ADMIN_OK=false
+        fi
     fi
 fi
 

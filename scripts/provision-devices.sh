@@ -18,10 +18,10 @@ warn()    { echo -e "${YELLOW}  ⚠ $*${NC}"; }
 error()   { echo -e "${RED}  ✘ $*${NC}" >&2; }
 
 # ── Prerequisites ─────────────────────────────────────────────────────────────
-for cmd in curl jq; do
+for cmd in curl docker jq; do
     if ! command -v "$cmd" &>/dev/null; then
         error "Required tool not found: $cmd"
-        echo "  Install with: sudo apt-get install $cmd"
+        echo "  Install or enable it, then re-run this script."
         exit 1
     fi
 done
@@ -60,23 +60,21 @@ fi
 
 # ── Authenticate ──────────────────────────────────────────────────────────────
 info "Authenticating with ChirpStack API at ${API_BASE}..."
-LOGIN_RESP=$(curl -sf \
-    -H "Content-Type: application/json" \
-    -d "$(jq -n --arg e "$CHIRPSTACK_ADMIN_EMAIL" --arg p "$CHIRPSTACK_ADMIN_PASSWORD" \
-        '{email:$e,password:$p}')" \
-    "${API_BASE}/internal/login") || {
-    error "Login request failed. Is ChirpStack running and reachable?"
-    exit 1
-}
+API_KEY="${CHIRPSTACK_API_KEY:-}"
+if [[ -z "$API_KEY" ]]; then
+    API_KEY=$(docker compose exec -T chirpstack \
+        chirpstack -c /etc/chirpstack create-api-key \
+        --name "provision-devices-$(date -u +%Y%m%d%H%M%S)" | \
+        awk -F': ' '/^token: /{print $2; exit}')
+fi
 
-JWT=$(echo "$LOGIN_RESP" | jq -r '.jwt // empty')
-if [[ -z "$JWT" ]]; then
-    error "No JWT returned. Check admin credentials in .env."
+if [[ -z "$API_KEY" ]]; then
+    error "No API key returned. Check that ChirpStack is running and Docker access works."
     exit 1
 fi
-success "Authenticated"
+success "Authenticated with API key"
 
-AUTH_HEADERS=(-H "Authorization: Bearer $JWT" -H "Content-Type: application/json")
+AUTH_HEADERS=(-H "Grpc-Metadata-Authorization: Bearer $API_KEY" -H "Content-Type: application/json")
 
 # ── Get default tenant ID ─────────────────────────────────────────────────────
 info "Fetching tenant..."
