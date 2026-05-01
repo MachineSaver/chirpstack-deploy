@@ -129,7 +129,9 @@ if command -v shellcheck &>/dev/null; then
         "$ROOT/setup.sh" \
         "$ROOT/scripts/generate-config.sh" \
         "$ROOT/scripts/validate.sh" \
-        "$ROOT/scripts/renew-ssl.sh"; do
+        "$ROOT/scripts/renew-ssl.sh" \
+        "$ROOT/scripts/backup.sh" \
+        "$ROOT/scripts/restore.sh"; do
         if shellcheck "$f"; then
             ok "shellcheck $(basename "$f")"
         else
@@ -163,7 +165,9 @@ CHIRPSTACK_SECRET=00000000000000000000000000000000000000000000000000000000000000
 CHIRPSTACK_ADMIN_EMAIL=admin@example.com
 CHIRPSTACK_ADMIN_PASSWORD=testadminpassword
 EXTERNAL_MQTT_SERVER=
+EXPOSE_MQTT=false
 ENABLE_MONITORING=${monitoring}
+GRAFANA_ROOT_URL=$([ -n "$domain" ] && echo "https://${domain}/grafana/" || echo "http://localhost/grafana/")
 INFLUXDB_ADMIN_USER=admin
 INFLUXDB_ADMIN_PASSWORD=testpassword
 INFLUXDB_ORG=chirpstack
@@ -268,6 +272,7 @@ PY
 
 if command -v python3 &>/dev/null && python3 -c "import yaml" 2>/dev/null; then
     validate_yaml "$ROOT/docker-compose.yml"
+    validate_yaml "$ROOT/docker-compose.mqtt.yml"
     validate_yaml "$ROOT/docker-compose.monitoring.yml"
     validate_yaml "$ROOT/config/grafana/provisioning/dashboards/dashboards.yml"
     validate_json "$ROOT/config/grafana/provisioning/dashboard-files/chirpstack-overview.json"
@@ -298,7 +303,9 @@ if command -v docker &>/dev/null && docker compose version &>/dev/null 2>&1; the
         fi
     }
     dc_validate "base stack"       -f "$ROOT/docker-compose.yml"
+    dc_validate "mqtt stack"       -f "$ROOT/docker-compose.yml" -f "$ROOT/docker-compose.mqtt.yml"
     dc_validate "monitoring stack" -f "$ROOT/docker-compose.yml" -f "$ROOT/docker-compose.monitoring.yml"
+    dc_validate "mqtt + monitoring stack" -f "$ROOT/docker-compose.yml" -f "$ROOT/docker-compose.mqtt.yml" -f "$ROOT/docker-compose.monitoring.yml"
 else
     skip "docker not available for Compose validation"
 fi

@@ -133,7 +133,19 @@ while true; do
     warn "Invalid email address. Try again."
 done
 
-# ── Step 6: Monitoring stack ─────────────────────────────────────────────────
+# ── Step 6: Optional host MQTT access ────────────────────────────────────────
+header "Optional MQTT host access"
+echo "  ChirpStack uses Mosquitto internally either way."
+echo "  Expose port 1883 only if external MQTT clients must connect directly."
+echo ""
+read -rp "  Expose MQTT on the host? [y/N]: " MQTT_CHOICE
+if [[ "${MQTT_CHOICE,,}" == "y" ]]; then
+    EXPOSE_MQTT="true"
+else
+    EXPOSE_MQTT="false"
+fi
+
+# ── Step 7: Monitoring stack ─────────────────────────────────────────────────
 header "Optional monitoring (Grafana + InfluxDB)"
 echo "  Adds a Grafana dashboard and InfluxDB metrics database."
 echo "  Accessible at http(s)://HOST/grafana/ after setup."
@@ -161,7 +173,7 @@ INFLUXDB_TOKEN="$(gen_secret 32)"
 
 success "All secrets generated"
 
-# ── Step 8: Write .env ───────────────────────────────────────────────────────
+# ── Step 9: Write .env ───────────────────────────────────────────────────────
 header "Writing configuration"
 
 cat > .env <<EOF
@@ -189,6 +201,7 @@ CHIRPSTACK_ADMIN_EMAIL=${CHIRPSTACK_ADMIN_EMAIL}
 CHIRPSTACK_ADMIN_PASSWORD=${CHIRPSTACK_ADMIN_PASSWORD}
 
 EXTERNAL_MQTT_SERVER=
+EXPOSE_MQTT=${EXPOSE_MQTT}
 
 ENABLE_MONITORING=${ENABLE_MONITORING}
 INFLUXDB_ADMIN_USER=admin
@@ -206,11 +219,11 @@ EOF
 
 success ".env written"
 
-# ── Step 9: Generate configs ─────────────────────────────────────────────────
+# ── Step 10: Generate configs ────────────────────────────────────────────────
 header "Rendering configuration files"
 bash scripts/generate-config.sh
 
-# ── Step 10: Generate Mosquitto password file ────────────────────────────────
+# ── Step 11: Generate Mosquitto password file ────────────────────────────────
 info "Generating Mosquitto credentials..."
 mkdir -p "$SCRIPT_DIR/generated/mosquitto"
 # Use a temp container — avoids needing mosquitto_passwd installed on the host
@@ -257,15 +270,18 @@ if [[ "$SSL_ENABLED" == "true" ]]; then
     fi
 fi
 
-# ── Step 12: Start the stack ─────────────────────────────────────────────────
+# ── Step 13: Start the stack ─────────────────────────────────────────────────
 header "Starting ChirpStack"
 
-COMPOSE_CMD="docker compose -f docker-compose.yml"
+COMPOSE_CMD=(docker compose -f docker-compose.yml)
+if [[ "$EXPOSE_MQTT" == "true" ]]; then
+    COMPOSE_CMD+=(-f docker-compose.mqtt.yml)
+fi
 if [[ "$ENABLE_MONITORING" == "true" ]]; then
-    COMPOSE_CMD="$COMPOSE_CMD -f docker-compose.monitoring.yml"
+    COMPOSE_CMD+=(-f docker-compose.monitoring.yml)
 fi
 
-$COMPOSE_CMD up -d
+"${COMPOSE_CMD[@]}" up -d
 
 # Wait for ChirpStack health endpoint
 info "Waiting for ChirpStack to be ready..."
@@ -328,7 +344,7 @@ if [[ "$READY" == "true" ]]; then
     fi
 fi
 
-# ── Step 13: Print summary ───────────────────────────────────────────────────
+# ── Step 15: Print summary ───────────────────────────────────────────────────
 if [[ "$SSL_ENABLED" == "true" ]]; then
     BASE_URL="https://${DOMAIN}"
 else
@@ -359,15 +375,20 @@ else
 fi
 echo ""
 echo -e "${BOLD}MQTT (for integrations):${NC}"
-echo "  Server:   ${BASE_URL/http/mqtt}:1883"
-echo "  User:     chirpstack"
-echo "  Password: ${MOSQUITTO_PASSWORD}"
+if [[ "$EXPOSE_MQTT" == "true" ]]; then
+    echo "  Server:   ${BASE_URL/http/mqtt}:1883"
+    echo "  User:     chirpstack"
+    echo "  Password: ${MOSQUITTO_PASSWORD}"
+else
+    echo "  Host access disabled. Internal MQTT is still available to stack services."
+    echo "  Set EXPOSE_MQTT=true and include docker-compose.mqtt.yml to allow direct clients."
+fi
 echo ""
 echo -e "${BOLD}Firewall — open these ports on your server:${NC}"
 echo "  80/tcp   (HTTP)"
 [[ "$SSL_ENABLED" == "true" ]] && echo "  443/tcp  (HTTPS)"
 echo "  1700/udp (LoRa UDP gateway forwarder)"
-echo "  1883/tcp (MQTT)"
+[[ "$EXPOSE_MQTT" == "true" ]] && echo "  1883/tcp (MQTT, optional host access)"
 echo "  3001/tcp (Basics Station WebSocket)"
 echo ""
 echo -e "${BOLD}Next steps:${NC}"
@@ -378,5 +399,5 @@ echo "  4. Create an Application and register your devices"
 echo ""
 echo "  Logs:       docker compose logs -f chirpstack"
 echo "  Stop stack: docker compose down"
-echo "  Restart:    docker compose up -d"
+echo "  Restart:    ${COMPOSE_CMD[*]} up -d"
 echo ""

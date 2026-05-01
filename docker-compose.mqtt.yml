@@ -1,0 +1,10 @@
+name: chirpstack
+
+services:
+
+  # Optional host listener for MQTT integrations.
+  # The base stack keeps Mosquitto internal-only; include this file only when
+  # external clients need to connect directly to the broker.
+  mosquitto:
+    ports:
+      - "${MQTT_PORT:-1883}:1883"

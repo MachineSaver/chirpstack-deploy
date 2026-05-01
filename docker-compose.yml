@@ -38,8 +38,6 @@ services:
   mosquitto:
     image: eclipse-mosquitto:2.0.22
     restart: unless-stopped
-    ports:
-      - "${MQTT_PORT:-1883}:1883"
     volumes:
       - ./config/mosquitto/mosquitto.conf:/mosquitto/config/mosquitto.conf:ro
       - ./generated/mosquitto/passwd:/mosquitto/config/passwd:ro
