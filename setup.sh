@@ -176,7 +176,13 @@ else
     ENABLE_MONITORING="false"
 fi
 
-# ── Step 7: Generate secrets ─────────────────────────────────────────────────
+if [[ "$SSL_ENABLED" == "true" ]]; then
+    GRAFANA_ROOT_URL="https://${DOMAIN}/grafana/"
+else
+    GRAFANA_ROOT_URL="http://localhost/grafana/"
+fi
+
+# ── Step 8: Generate secrets ─────────────────────────────────────────────────
 header "Generating secrets"
 
 gen_secret() { openssl rand -hex "$1"; }
@@ -223,6 +229,7 @@ EXTERNAL_MQTT_SERVER=
 EXPOSE_MQTT=${EXPOSE_MQTT}
 
 ENABLE_MONITORING=${ENABLE_MONITORING}
+GRAFANA_ROOT_URL=${GRAFANA_ROOT_URL}
 INFLUXDB_ADMIN_USER=admin
 INFLUXDB_ADMIN_PASSWORD=${INFLUXDB_ADMIN_PASSWORD}
 INFLUXDB_ORG=chirpstack

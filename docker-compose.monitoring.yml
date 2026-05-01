@@ -29,7 +29,7 @@ services:
     image: grafana/grafana:13.0.1
     restart: unless-stopped
     environment:
-      GF_SERVER_ROOT_URL: "%(protocol)s://%(domain)s/grafana/"
+      GF_SERVER_ROOT_URL: "${GRAFANA_ROOT_URL:-http://localhost/grafana/}"
       GF_SERVER_SERVE_FROM_SUB_PATH: "true"
       GF_SECURITY_ADMIN_USER: admin
       GF_SECURITY_ADMIN_PASSWORD: ${CHIRPSTACK_ADMIN_PASSWORD}
