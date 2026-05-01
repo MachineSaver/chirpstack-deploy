@@ -1,6 +1,6 @@
 # ChirpStack v4 — Repeatable Docker Compose Deployment
 
-A self-contained, production-ready deployment of [ChirpStack v4](https://www.chirpstack.io/) — the open-source LoRaWAN Network Server. Run `./setup.sh` and answer six questions. That's it.
+A self-contained, production-ready deployment of [ChirpStack v4](https://www.chirpstack.io/) — the open-source LoRaWAN Network Server. Run `./setup.sh` and answer the prompts. That's it.
 
 **Supports:**
 - VPS with a domain name (HTTPS via Let's Encrypt)
@@ -27,8 +27,9 @@ A self-contained, production-ready deployment of [ChirpStack v4](https://www.chi
 12. [Configuration Reference](#configuration-reference)
 13. [Switching Regions](#switching-regions)
 14. [SSL Certificate Renewal](#ssl-certificate-renewal)
-15. [Troubleshooting](#troubleshooting)
-16. [File Reference](#file-reference)
+15. [Backup and Restore](#backup-and-restore)
+16. [Troubleshooting](#troubleshooting)
+17. [File Reference](#file-reference)
 
 ---
 
@@ -42,7 +43,7 @@ graph TB
         GW_UDP["LoRa Gateway\n(Semtech UDP)"]
         GW_BS["LoRa Gateway\n(Basics Station)"]
         BROWSER["Web Browser\n/ API Client"]
-        EXT_MQTT["External MQTT\nConsumer"]
+        EXT_MQTT["External MQTT\nConsumer\n(optional)"]
     end
 
     subgraph HOST["Your Server / VPS"]
@@ -68,7 +69,7 @@ graph TB
     GW_UDP -->|"UDP :1700"| GB_UDP
     GW_BS -->|"WSS :3001"| PROXY --> GB_BS
     BROWSER -->|"HTTP/S :80/443"| PROXY --> CS
-    EXT_MQTT <-->|"TCP :1883"| MQ
+    EXT_MQTT <-.->|"TCP :1883\noptional host exposure"| MQ
 
     GB_UDP -->|MQTT| MQ
     GB_BS  -->|MQTT| MQ
@@ -86,15 +87,15 @@ graph TB
 
 | Service | Image | Role |
 |---|---|---|
-| **chirpstack** | `chirpstack/chirpstack:4` | LoRaWAN Network + Application Server. Manages gateways, devices, tenants. Serves web UI and REST/gRPC APIs. |
-| **gateway-bridge-udp** | `chirpstack/chirpstack-gateway-bridge:4` | Receives Semtech UDP packets from gateways and republishes them as Protobuf over MQTT. |
-| **gateway-bridge-bs** | `chirpstack/chirpstack-gateway-bridge:4` | Same as above but speaks the Basics Station LNS WebSocket protocol. |
-| **mosquitto** | `eclipse-mosquitto:2` | Internal MQTT v5 broker. All gateway-bridge → ChirpStack communication flows through it. |
-| **postgres** | `postgres:15` | Primary database. Stores all persistent state: devices, gateways, tenants, frame logs. |
-| **redis** | `redis:7` | Session cache, downlink queue, deduplication, distributed locks. |
-| **nginx** | `nginx:1.25` | Reverse proxy. Terminates SSL, routes web UI, REST API, Grafana, and Basics Station WebSocket. |
-| **influxdb** | `influxdb:2` | *(optional)* Time-series metrics database for gateway packet and device uplink traffic. |
-| **grafana** | `grafana/grafana` | *(optional)* Visualization dashboards, pre-wired to PostgreSQL for gateway state and InfluxDB for traffic charts. |
+| **chirpstack** | `chirpstack/chirpstack:4.17.0` | LoRaWAN Network + Application Server. Manages gateways, devices, tenants. Serves web UI and REST/gRPC APIs. |
+| **gateway-bridge-udp** | `chirpstack/chirpstack-gateway-bridge:4.1.1` | Receives Semtech UDP packets from gateways and republishes them as Protobuf over MQTT. |
+| **gateway-bridge-bs** | `chirpstack/chirpstack-gateway-bridge:4.1.1` | Same as above but speaks the Basics Station LNS WebSocket protocol. |
+| **mosquitto** | `eclipse-mosquitto:2.0.22` | Internal MQTT v5 broker. All gateway-bridge to ChirpStack communication flows through it. Host access is optional. |
+| **postgres** | `postgres:15.17-alpine` | Primary database. Stores all persistent state: devices, gateways, tenants, frame logs. |
+| **redis** | `redis:7.4.8-alpine` | Session cache, downlink queue, deduplication, distributed locks. |
+| **nginx** | `nginx:1.29.8-alpine` | Reverse proxy. Terminates SSL, routes web UI, REST API, Grafana, and Basics Station WebSocket. |
+| **influxdb** | `influxdb:2.8.0` | *(optional)* Time-series metrics database for gateway packet and device uplink traffic. |
+| **grafana** | `grafana/grafana:13.0.1` | *(optional)* Visualization dashboards, pre-wired to PostgreSQL for gateway state and InfluxDB for traffic charts. |
 
 ---
 
@@ -179,7 +180,7 @@ Both modes use **identical Docker services** — only the Nginx configuration an
 │  :80  (TCP)  ── HTTP (web UI redirect or direct in local mode)  │
 │  :443 (TCP)  ── HTTPS (VPS mode only)                           │
 │  :1700 (UDP) ── LoRa Semtech UDP packet forwarder               │
-│  :1883 (TCP) ── MQTT (gateways, external integrations)          │
+│  :1883 (TCP) ── MQTT (optional external integrations)           │
 │  :3001 (TCP) ── Basics Station WebSocket (ws:// or wss://)      │
 │                                                                 │
 │  ── NOT exposed externally ──────────────────────────────────── │
@@ -196,9 +197,10 @@ Both modes use **identical Docker services** — only the Nginx configuration an
 > ufw allow 80/tcp
 > ufw allow 443/tcp
 > ufw allow 1700/udp
-> ufw allow 1883/tcp
 > ufw allow 3001/tcp
 > ```
+>
+> Open `1883/tcp` only if you enabled optional MQTT host access during setup.
 
 ---
 
@@ -209,6 +211,7 @@ Both modes use **identical Docker services** — only the Nginx configuration an
 | Docker Engine | 24+ | [Install guide](https://docs.docker.com/engine/install/) |
 | Docker Compose plugin | v2 | Comes with Docker Desktop; on Linux: `apt install docker-compose-plugin` |
 | `openssl` | any | Pre-installed on macOS and most Linux distros |
+| `envsubst` | any | Usually provided by `gettext-base` on Linux |
 | A VPS or Linux machine | — | 1 GB RAM minimum; 2 GB recommended with monitoring |
 
 The `setup.sh` script will check for Docker and exit with instructions if it is not found.
@@ -226,7 +229,7 @@ cd chirpstack-deploy
 ./setup.sh
 ```
 
-The script will ask you six questions and handle everything else automatically.
+The script will ask a short set of questions and handle everything else automatically.
 
 ---
 
@@ -241,7 +244,11 @@ flowchart TD
     D --> F
     E --> F[Choose LoRa region\nUS915 or EU868]
     F --> G[Enter admin email]
-    G --> H{Enable Grafana\n+ InfluxDB?}
+    G --> V{Expose MQTT\non host?}
+    V -->|Yes| W[Include docker-compose.mqtt.yml\nwhen starting stack]
+    V -->|No| X[Keep MQTT internal-only]
+    W --> H{Enable Grafana\n+ InfluxDB?}
+    X --> H
     H -->|Yes| I[Set ENABLE_MONITORING=true]
     H -->|No| J[Skip monitoring]
     I --> K
@@ -259,7 +266,7 @@ flowchart TD
     U --> T([Print summary:\nURL, credentials,\ngateway endpoints])
 ```
 
-**The six questions `setup.sh` asks:**
+**The questions `setup.sh` asks:**
 
 | # | Question | Options |
 |---|---|---|
@@ -268,9 +275,12 @@ flowchart TD
 | 3 | Let's Encrypt email | *(VPS only)* for cert expiry notices |
 | 4 | LoRa region | US915 (Americas) / EU868 (Europe) |
 | 5 | Admin email address | your login for the web UI |
-| 6 | Enable monitoring? | Grafana + InfluxDB |
+| 6 | Expose MQTT on the host? | Optional direct access for external MQTT clients |
+| 7 | Enable monitoring? | Grafana + InfluxDB |
 
 All passwords and secrets are **auto-generated** — you don't choose them. They are printed in the summary at the end and stored in `.env`.
+
+If `.env` already exists, `setup.sh` exits without changing it unless you type `OVERWRITE`. When overwriting, the previous `.env` is backed up first.
 
 ---
 
@@ -361,13 +371,21 @@ The sensor will send a Join Request. In the ChirpStack UI under your device → 
 
 ### Internal MQTT (always on)
 
-All device events are published to the internal Mosquitto broker automatically. Connect any MQTT client using the credentials printed at the end of `setup.sh`.
+All device events are published to the internal Mosquitto broker automatically. Stack services can always reach it on the Docker network.
+
+Direct host access is disabled by default. If you enabled MQTT host access during setup, connect external clients using the credentials printed at the end of `setup.sh`.
 
 ```
 Broker:    YOUR_SERVER:1883
 Username:  chirpstack
 Password:  (printed in setup summary, also in .env)
 Topic:     application/+/device/+/event/+
+```
+
+To enable host access after setup, set `EXPOSE_MQTT=true` in `.env` and include the optional Compose file when starting the stack:
+
+```bash
+docker compose -f docker-compose.yml -f docker-compose.mqtt.yml up -d
 ```
 
 ### HTTP Webhooks
@@ -456,11 +474,13 @@ docker compose up -d --force-recreate chirpstack
 | `CHIRPSTACK_ADMIN_EMAIL` | *(your input)* | Initial admin login |
 | `CHIRPSTACK_ADMIN_PASSWORD` | *(generated)* | Initial admin password |
 | `EXTERNAL_MQTT_SERVER` | *(blank)* | External broker URI (optional) |
+| `EXPOSE_MQTT` | `false` | Publish Mosquitto on host port `MQTT_PORT` |
 | `ENABLE_MONITORING` | `false` | Enables Grafana + InfluxDB |
+| `GRAFANA_ROOT_URL` | `http://localhost/grafana/` | Public Grafana URL used for redirects |
 | `INFLUXDB_TOKEN` | *(generated)* | InfluxDB API token |
 | `HTTP_PORT` | `80` | Override if port 80 is in use |
 | `HTTPS_PORT` | `443` | Override if port 443 is in use |
-| `MQTT_PORT` | `1883` | External MQTT port |
+| `MQTT_PORT` | `1883` | Optional host MQTT port when `EXPOSE_MQTT=true` |
 | `GATEWAY_UDP_PORT` | `1700` | Semtech UDP gateway port |
 | `GATEWAY_BS_PORT` | `3001` | Basics Station WebSocket port |
 
@@ -504,6 +524,42 @@ To verify the cron job is set:
 ```bash
 crontab -l | grep renew-ssl
 ```
+
+---
+
+## Backup and Restore
+
+Create a backup before upgrades, host migration, or risky configuration changes:
+
+```bash
+bash scripts/backup.sh
+```
+
+By default, backups are written to `backups/chirpstack-backup-YYYYMMDDTHHMMSSZ.tar.gz`. To write somewhere else:
+
+```bash
+bash scripts/backup.sh /secure/backup/path
+```
+
+Each archive includes `.env`, generated runtime config, a PostgreSQL logical dump, and snapshots of Redis, Mosquitto, Certbot, and optional monitoring volumes.
+
+Restore is destructive to the current deployment state and requires an explicit confirmation prompt:
+
+```bash
+bash scripts/restore.sh backups/chirpstack-backup-YYYYMMDDTHHMMSSZ.tar.gz
+```
+
+Restore stops the stack, replaces `.env` and `generated/`, recreates the PostgreSQL volume from the dump, restores archived Docker volumes, regenerates config, and starts the stack with the restored settings.
+
+Recommended upgrade flow:
+
+```bash
+bash scripts/backup.sh
+docker compose pull
+docker compose up -d
+```
+
+If the upgrade fails, restore the backup archive created before pulling new images.
 
 ---
 
@@ -557,6 +613,8 @@ Common causes:
 docker compose logs mosquitto
 ```
 
+- Confirm `EXPOSE_MQTT=true` in `.env`
+- Confirm the stack was started with `-f docker-compose.mqtt.yml`
 - Confirm username/password from `.env` (field `MOSQUITTO_USER` / `MOSQUITTO_PASSWORD`)
 - Test with: `mosquitto_sub -h YOUR_HOST -p 1883 -u chirpstack -P YOUR_PASSWORD -t '#'`
 
@@ -581,6 +639,7 @@ docker compose down -v   # removes volumes — all device/gateway data lost
 chirpstack-deploy/
 ├── setup.sh                              ← Run this to deploy
 ├── docker-compose.yml                    ← Core services
+├── docker-compose.mqtt.yml               ← MQTT host port exposure (optional)
 ├── docker-compose.monitoring.yml         ← Grafana + InfluxDB (optional)
 ├── .env                                  ← Your secrets (git-ignored, generated by setup.sh)
 ├── .env.example                          ← Template with documentation
@@ -631,9 +690,11 @@ chirpstack-deploy/
 │               └── postgres.yml          ← Rendered Grafana PostgreSQL datasource config
 │
 └── scripts/
+    ├── backup.sh                         ← Creates deployment backup archives
     ├── generate-config.sh                ← Renders templates using .env values
     ├── postgres-init.sql                 ← Enables pg_trgm on first DB start
-    └── renew-ssl.sh                      ← Certbot renewal + Nginx reload
+    ├── renew-ssl.sh                      ← Certbot renewal + Nginx reload
+    └── restore.sh                        ← Restores backup archives
 ```
 
 ---

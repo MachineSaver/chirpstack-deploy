@@ -78,9 +78,24 @@ Create a minimal post-deployment smoke test that verifies expected services, hea
 
 Document how to update container images, back up volumes, restore data, rotate credentials, and change regions safely.
 
-
 ## Recently Completed
 
 ### Fix gateway monitoring dashboards
 
 Grafana gateway online and last-seen panels now query ChirpStack's authoritative PostgreSQL `gateway` state using `last_seen_at` and `stats_interval_secs`. InfluxDB remains the source for gateway packet and device uplink time-series charts, and `scripts/validate.sh --live-gateway-status` provides an optional live smoke check for connected gateways.
+
+### Add backup and restore tooling
+
+`scripts/backup.sh` now creates a timestamped archive with `.env`, generated runtime config, a PostgreSQL logical dump, and Docker volume snapshots for Redis, Mosquitto, Certbot, and optional monitoring state. `scripts/restore.sh` restores that archive after explicit confirmation and restarts the stack.
+
+### Make public MQTT exposure explicit
+
+Mosquitto now stays internal by default. Host port `1883` is exposed only through the optional `docker-compose.mqtt.yml` override and `EXPOSE_MQTT` setup choice.
+
+### Make setup safe to rerun
+
+`setup.sh` now detects an existing `.env`, exits without changes by default, and backs up the current file before an intentional overwrite.
+
+### Harden admin and SSL setup paths
+
+Admin setup now avoids guessed container names and verifies the admin email update. SSL renewal now uses deterministic Compose volume names instead of broad Docker volume matching.
