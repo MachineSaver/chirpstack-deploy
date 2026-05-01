@@ -20,6 +20,9 @@ success() { echo -e "${GREEN}  ✔ $*${NC}"; }
 warn()    { echo -e "${YELLOW}  ⚠ $*${NC}"; }
 error()   { echo -e "${RED}  ✘ $*${NC}" >&2; }
 header()  { echo -e "\n${BOLD}${CYAN}═══ $* ═══${NC}\n"; }
+valid_email() {
+    [[ "$1" =~ ^[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Za-z]{2,}$ ]]
+}
 
 # ── Step 1: Prerequisites ────────────────────────────────────────────────────
 header "Checking prerequisites"
@@ -112,7 +115,7 @@ if [[ "$DEPLOY_MODE" == "vps" ]]; then
     echo "  Email address for Let's Encrypt certificate notifications:"
     while true; do
         read -rp "  Email: " SSL_EMAIL
-        if [[ "$SSL_EMAIL" =~ ^[^@]+@[^@]+\.[^@]+$ ]]; then
+        if valid_email "$SSL_EMAIL"; then
             break
         fi
         warn "That doesn't look like a valid email address. Try again."
@@ -142,7 +145,7 @@ echo "  This creates the initial administrator account for the ChirpStack web UI
 echo ""
 while true; do
     read -rp "  Admin email: " CHIRPSTACK_ADMIN_EMAIL
-    if [[ "$CHIRPSTACK_ADMIN_EMAIL" =~ ^[^@]+@[^@]+\.[^@]+$ ]]; then
+    if valid_email "$CHIRPSTACK_ADMIN_EMAIL"; then
         break
     fi
     warn "Invalid email address. Try again."
@@ -318,7 +321,7 @@ else
     success "ChirpStack is up"
 fi
 
-# ── Step 13a: Set admin credentials ─────────────────────────────────────────
+# ── Step 14: Set admin credentials ──────────────────────────────────────────
 # ChirpStack seeds a default admin user (email: admin, password: admin).
 # We update it to match the values collected above.
 if [[ "$READY" == "true" ]]; then
@@ -326,14 +329,15 @@ if [[ "$READY" == "true" ]]; then
 
     ADMIN_OK=true
 
-    # Copy the generated password into the container; remove it when done
-    PW_FILE=$(mktemp)
-    printf '%s' "${CHIRPSTACK_ADMIN_PASSWORD}" > "$PW_FILE"
-    docker cp "$PW_FILE" chirpstack:/tmp/cs-admin-pw
-    rm -f "$PW_FILE"
+    # Copy the generated password into the service container; remove it when done.
+    # Use Compose service addressing instead of assuming a container name.
+    if ! printf '%s' "${CHIRPSTACK_ADMIN_PASSWORD}" | docker compose exec -T chirpstack sh -c 'cat > /tmp/cs-admin-pw'; then
+        warn "Could not copy admin password into the ChirpStack container."
+        ADMIN_OK=false
+    fi
 
     # Set password on the seeded 'admin' account
-    if ! docker compose exec -T chirpstack \
+    if [[ "$ADMIN_OK" == "true" ]] && ! docker compose exec -T chirpstack \
             chirpstack -c /etc/chirpstack set-password \
             --email admin \
             --password-file /tmp/cs-admin-pw; then
@@ -341,11 +345,16 @@ if [[ "$READY" == "true" ]]; then
         ADMIN_OK=false
     fi
 
-    # Update email in the database (POSTGRES_USER/DB are always 'chirpstack' in this setup)
-    if ! docker compose exec -T postgres \
-            psql -U chirpstack chirpstack -q \
-            -c "UPDATE \"user\" SET email='${CHIRPSTACK_ADMIN_EMAIL}' WHERE is_admin=true;"; then
+    # Update email in the database. Admin email validation above restricts this
+    # to conventional address characters before it reaches SQL.
+    UPDATED_EMAIL=""
+    if ! UPDATED_EMAIL=$(docker compose exec -T postgres \
+            psql -U "${POSTGRES_USER}" "${POSTGRES_DB}" -tAc \
+            "UPDATE \"user\" SET email='${CHIRPSTACK_ADMIN_EMAIL}' WHERE is_admin=true RETURNING email;"); then
         warn "Could not update admin email — account may still be reachable as 'admin'."
+        ADMIN_OK=false
+    elif [[ "$UPDATED_EMAIL" != "$CHIRPSTACK_ADMIN_EMAIL" ]]; then
+        warn "Admin email update did not affect the expected admin account."
         ADMIN_OK=false
     fi
 
