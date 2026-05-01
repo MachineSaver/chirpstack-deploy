@@ -1,0 +1,19 @@
+apiVersion: 1
+
+datasources:
+  - name: ChirpStack PostgreSQL
+    uid: chirpstack-postgres
+    type: postgres
+    access: proxy
+    url: postgres:5432
+    user: ${POSTGRES_USER}
+    database: ${POSTGRES_DB}
+    isDefault: false
+    jsonData:
+      database: ${POSTGRES_DB}
+      sslmode: disable
+      postgresVersion: 1500
+      timescaledb: false
+    secureJsonData:
+      password: ${POSTGRES_PASSWORD}
+    editable: false

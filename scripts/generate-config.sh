@@ -160,10 +160,15 @@ envsubst '${DOMAIN} ${GATEWAY_BS_PORT}' < "$NGINX_TMPL" \
     > "$ROOT/generated/nginx/nginx.conf"
 echo "  [ok] generated/nginx/nginx.conf ($([ "${SSL_ENABLED:-false}" == "true" ] && echo HTTPS || echo HTTP))"
 
-# ── Render Grafana datasource (substitute env vars) ──────────────────────────
+# ── Render Grafana datasources (substitute env vars) ─────────────────────────
 if [[ "${ENABLE_MONITORING:-false}" == "true" ]]; then
     envsubst '${INFLUXDB_ORG} ${INFLUXDB_BUCKET} ${INFLUXDB_TOKEN}' \
         < "$ROOT/config/grafana/provisioning/datasources/influxdb.yml.tmpl" \
         > "$ROOT/generated/grafana/provisioning/datasources/influxdb.yml"
     echo "  [ok] generated/grafana/provisioning/datasources/influxdb.yml"
+
+    envsubst '${POSTGRES_USER} ${POSTGRES_PASSWORD} ${POSTGRES_DB}' \
+        < "$ROOT/config/grafana/provisioning/datasources/postgres.yml.tmpl" \
+        > "$ROOT/generated/grafana/provisioning/datasources/postgres.yml"
+    echo "  [ok] generated/grafana/provisioning/datasources/postgres.yml"
 fi

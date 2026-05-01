@@ -7,7 +7,7 @@ A self-contained, production-ready deployment of [ChirpStack v4](https://www.chi
 - Local network / home lab (plain HTTP, no domain needed)
 - US915 (Americas) and EU868 (Europe) frequency regions
 - Semtech UDP and Basics Station gateway protocols
-- Optional Grafana + InfluxDB monitoring stack
+- Optional Grafana monitoring stack with PostgreSQL gateway state and InfluxDB traffic charts
 
 ---
 
@@ -76,8 +76,9 @@ graph TB
 
     CS --> PG
     CS --> RD
-    CS -->|metrics| INF
-    INF --> GRF
+    CS -->|traffic metrics| INF
+    PG -->|gateway state| GRF
+    INF -->|traffic charts| GRF
     GRF --> PROXY
 ```
 
@@ -92,8 +93,8 @@ graph TB
 | **postgres** | `postgres:15` | Primary database. Stores all persistent state: devices, gateways, tenants, frame logs. |
 | **redis** | `redis:7` | Session cache, downlink queue, deduplication, distributed locks. |
 | **nginx** | `nginx:1.25` | Reverse proxy. Terminates SSL, routes web UI, REST API, Grafana, and Basics Station WebSocket. |
-| **influxdb** | `influxdb:2` | *(optional)* Time-series metrics database for device/gateway statistics. |
-| **grafana** | `grafana/grafana` | *(optional)* Visualization dashboards, pre-wired to InfluxDB. |
+| **influxdb** | `influxdb:2` | *(optional)* Time-series metrics database for gateway packet and device uplink traffic. |
+| **grafana** | `grafana/grafana` | *(optional)* Visualization dashboards, pre-wired to PostgreSQL for gateway state and InfluxDB for traffic charts. |
 
 ---
 
@@ -394,7 +395,7 @@ docker compose restart chirpstack
 
 ### InfluxDB (via monitoring stack)
 
-When monitoring is enabled, ChirpStack writes gateway and device metrics directly to InfluxDB. No additional configuration is needed — it is wired up automatically during setup.
+When monitoring is enabled, ChirpStack writes gateway packet and device uplink traffic metrics directly to InfluxDB. Gateway online and last-seen state comes from ChirpStack's PostgreSQL `gateway` table, using the same `last_seen_at` and `stats_interval_secs` logic as ChirpStack itself.
 
 ---
 
@@ -411,14 +412,17 @@ Login with:
 - **Password:** same as your ChirpStack admin password (printed in setup summary)
 
 A pre-built **ChirpStack Overview** dashboard is auto-provisioned showing:
-- Gateways online
+- Gateway online/offline/never-seen counts from PostgreSQL
+- Gateway last-seen table from PostgreSQL
 - Gateway RX packets over time
 - Device uplinks over time
 
 ```mermaid
 flowchart LR
-    CS["ChirpStack\nServer"] -->|"InfluxDB\nLine Protocol"| IDB["InfluxDB"]
-    IDB -->|"Flux queries"| GRF["Grafana"]
+    CS["ChirpStack\nServer"] -->|"State"| PG["PostgreSQL"]
+    CS -->|"InfluxDB\nLine Protocol"| IDB["InfluxDB"]
+    PG -->|"SQL queries"| GRF["Grafana"]
+    IDB -->|"Flux queries"| GRF
     GRF -->|"/grafana/ (via Nginx)"| USER["Browser"]
 ```
 
@@ -603,7 +607,8 @@ chirpstack-deploy/
 │   └── grafana/
 │       └── provisioning/
 │           ├── datasources/
-│           │   └── influxdb.yml.tmpl     ← Template for Grafana InfluxDB datasource
+│           │   ├── influxdb.yml.tmpl     ← Template for Grafana InfluxDB datasource
+│           │   └── postgres.yml.tmpl     ← Template for Grafana PostgreSQL datasource
 │           ├── dashboards/
 │           │   └── dashboards.yml        ← Tells Grafana where to find dashboards
 │           └── dashboard-files/
@@ -622,7 +627,8 @@ chirpstack-deploy/
 │   └── grafana/
 │       └── provisioning/
 │           └── datasources/
-│               └── influxdb.yml          ← Rendered Grafana datasource config
+│               ├── influxdb.yml          ← Rendered Grafana InfluxDB datasource config
+│               └── postgres.yml          ← Rendered Grafana PostgreSQL datasource config
 │
 └── scripts/
     ├── generate-config.sh                ← Renders templates using .env values

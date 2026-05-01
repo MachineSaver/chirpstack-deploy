@@ -16,6 +16,78 @@ fail()    { echo "  [FAIL] $*" >&2; FAIL=$((FAIL + 1)); }
 skip()    { echo "  [skip] $*"; SKIP=$((SKIP + 1)); }
 section() { printf '\n── %s\n' "$*"; }
 
+usage() {
+    cat <<USAGE
+Usage:
+  scripts/validate.sh
+  scripts/validate.sh --live-gateway-status
+
+The default mode is offline validation. --live-gateway-status requires a
+running stack and an online gateway with non-null ChirpStack last_seen_at.
+USAGE
+}
+
+live_gateway_status() {
+    section "Live gateway status"
+
+    if [[ ! -f "$ROOT/.env" ]]; then
+        fail ".env not found"
+        printf '\n── Results: %d passed  %d failed  %d skipped\n' "$PASS" "$FAIL" "$SKIP"
+        [[ "$FAIL" -eq 0 ]]
+        return
+    fi
+    if ! command -v docker &>/dev/null || ! docker compose version &>/dev/null 2>&1; then
+        fail "docker compose is required for live gateway status"
+        printf '\n── Results: %d passed  %d failed  %d skipped\n' "$PASS" "$FAIL" "$SKIP"
+        [[ "$FAIL" -eq 0 ]]
+        return
+    fi
+
+    # shellcheck disable=SC1091
+    set -a; source "$ROOT/.env"; set +a
+
+    local sql result status
+    sql="select encode(gateway_id, 'hex') || '|' || name || '|online'
+from gateway
+where last_seen_at is not null
+  and (now() - make_interval(secs => stats_interval_secs * 2)) <= last_seen_at
+order by last_seen_at desc
+limit 1;"
+
+    if result=$(docker compose --project-directory "$ROOT" -f "$ROOT/docker-compose.yml" exec -T postgres \
+        psql -U "${POSTGRES_USER}" -d "${POSTGRES_DB}" -At -c "$sql" 2>&1); then
+        if [[ -n "$result" ]]; then
+            IFS='|' read -r gateway_id name status <<< "$result"
+            ok "online gateway: ${gateway_id} ${name} (${status})"
+        else
+            fail "no gateway with non-null last_seen_at currently computes as online"
+        fi
+    else
+        fail "query live gateway status"
+        printf '%s\n' "$result" >&2
+    fi
+
+    printf '\n── Results: %d passed  %d failed  %d skipped\n' "$PASS" "$FAIL" "$SKIP"
+    [[ "$FAIL" -eq 0 ]]
+}
+
+case "${1:-}" in
+    "")
+        ;;
+    --live-gateway-status)
+        live_gateway_status
+        exit $?
+        ;;
+    -h|--help)
+        usage
+        exit 0
+        ;;
+    *)
+        usage >&2
+        exit 1
+        ;;
+esac
+
 # ── Stash and restore .env and generated/ around the render tests ────────────
 ENV_STASH=""; GEN_STASH=""
 
@@ -53,7 +125,11 @@ trap restore EXIT
 section "Shell linting"
 
 if command -v shellcheck &>/dev/null; then
-    for f in "$ROOT/setup.sh" "$ROOT/scripts/generate-config.sh" "$ROOT/scripts/renew-ssl.sh"; do
+    for f in \
+        "$ROOT/setup.sh" \
+        "$ROOT/scripts/generate-config.sh" \
+        "$ROOT/scripts/validate.sh" \
+        "$ROOT/scripts/renew-ssl.sh"; do
         if shellcheck "$f"; then
             ok "shellcheck $(basename "$f")"
         else
@@ -139,13 +215,69 @@ PY
     fi
 }
 
+validate_json() {
+    local f="$1"
+    local err
+    if err=$(python3 -m json.tool "$f" 2>&1 >/dev/null); then
+        ok "json: $(basename "$f")"
+    else
+        fail "json: $(basename "$f")"
+        printf '%s\n' "$err" >&2
+    fi
+}
+
+validate_gateway_dashboard_sources() {
+    local err
+    if err=$(python3 - "$ROOT/config/grafana/provisioning/dashboard-files/chirpstack-overview.json" 2>&1 <<'PY'
+import json, sys
+path = sys.argv[1]
+dashboard = json.load(open(path))
+panels = {p.get("title"): p for p in dashboard.get("panels", [])}
+
+def datasource_uid(obj):
+    ds = obj.get("datasource")
+    if isinstance(ds, dict):
+        return ds.get("uid")
+    return ds
+
+online = panels.get("Gateways Online")
+last_seen = panels.get("Gateway Last Seen")
+if online is None:
+    raise SystemExit("missing Gateways Online panel")
+if last_seen is None:
+    raise SystemExit("missing Gateway Last Seen panel")
+if datasource_uid(online) != "chirpstack-postgres":
+    raise SystemExit("Gateways Online panel is not bound to PostgreSQL")
+if datasource_uid(last_seen) != "chirpstack-postgres":
+    raise SystemExit("Gateway Last Seen panel is not bound to PostgreSQL")
+for panel in (online, last_seen):
+    for target in panel.get("targets", []):
+        if datasource_uid(target) == "chirpstack-influxdb":
+            raise SystemExit(f"{panel['title']} target still uses InfluxDB")
+        sql = target.get("rawSql", "")
+        if "from gateway" not in sql.lower():
+            raise SystemExit(f"{panel['title']} target does not query gateway table")
+PY
+    ); then
+        ok "dashboard: gateway status uses PostgreSQL"
+    else
+        fail "dashboard: gateway status uses PostgreSQL"
+        printf '%s\n' "$err" >&2
+    fi
+}
+
 if command -v python3 &>/dev/null && python3 -c "import yaml" 2>/dev/null; then
     validate_yaml "$ROOT/docker-compose.yml"
     validate_yaml "$ROOT/docker-compose.monitoring.yml"
     validate_yaml "$ROOT/config/grafana/provisioning/dashboards/dashboards.yml"
+    validate_json "$ROOT/config/grafana/provisioning/dashboard-files/chirpstack-overview.json"
+    validate_gateway_dashboard_sources
     # Validate rendered datasource (written only when monitoring=true)
     if [[ -f "$ROOT/generated/grafana/provisioning/datasources/influxdb.yml" ]]; then
         validate_yaml "$ROOT/generated/grafana/provisioning/datasources/influxdb.yml"
+    fi
+    if [[ -f "$ROOT/generated/grafana/provisioning/datasources/postgres.yml" ]]; then
+        validate_yaml "$ROOT/generated/grafana/provisioning/datasources/postgres.yml"
     fi
 else
     skip "python3 + pyyaml not available (pip install pyyaml)"

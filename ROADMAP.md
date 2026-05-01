@@ -77,3 +77,10 @@ Create a minimal post-deployment smoke test that verifies expected services, hea
 ### Add upgrade documentation
 
 Document how to update container images, back up volumes, restore data, rotate credentials, and change regions safely.
+
+
+## Recently Completed
+
+### Fix gateway monitoring dashboards
+
+Grafana gateway online and last-seen panels now query ChirpStack's authoritative PostgreSQL `gateway` state using `last_seen_at` and `stats_interval_secs`. InfluxDB remains the source for gateway packet and device uplink time-series charts, and `scripts/validate.sh --live-gateway-status` provides an optional live smoke check for connected gateways.
