@@ -38,6 +38,7 @@ check_cmd() {
 
 check_cmd docker
 check_cmd openssl
+check_cmd envsubst
 
 # Ensure Docker Compose v2 (plugin style)
 if ! docker compose version &>/dev/null 2>&1; then
@@ -252,13 +253,15 @@ docker run --rm \
 chmod 644 "$SCRIPT_DIR/generated/mosquitto/passwd"
 success "Mosquitto passwd file created"
 
-# ── Step 11: SSL certificate (VPS mode) ──────────────────────────────────────
+# ── Step 12: SSL certificate (VPS mode) ──────────────────────────────────────
 if [[ "$SSL_ENABLED" == "true" ]]; then
     header "Obtaining SSL certificate"
     info "Starting Nginx temporarily for ACME HTTP challenge..."
 
-    # Start only nginx (in HTTP-only mode — https.conf.tmpl still has the
-    # /.well-known/acme-challenge block in the HTTP server block)
+    # Start Nginx with an HTTP-only config for first issuance. The normal HTTPS
+    # config references certificate files that do not exist until Certbot runs.
+    envsubst '${DOMAIN} ${GATEWAY_BS_PORT}' < "$SCRIPT_DIR/config/nginx/http.conf.tmpl" \
+        > "$SCRIPT_DIR/generated/nginx/nginx.conf"
     docker compose up -d nginx
 
     info "Running Certbot..."
@@ -276,6 +279,7 @@ if [[ "$SSL_ENABLED" == "true" ]]; then
     success "Certificate obtained for ${DOMAIN}"
 
     info "Reloading Nginx with HTTPS config..."
+    bash scripts/generate-config.sh
     docker compose exec nginx nginx -s reload 2>/dev/null || docker compose restart nginx
 
     # Set up auto-renewal cron (if crontab is available)
