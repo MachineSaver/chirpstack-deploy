@@ -420,7 +420,19 @@ if [[ "$READY" == "true" ]]; then
     fi
 fi
 
-# ── Step 15: Print summary ───────────────────────────────────────────────────
+# ── Step 15: Provision AirVibe device profiles ───────────────────────────────
+if [[ "${READY:-false}" == "true" ]] && [[ "${ADMIN_OK:-false}" == "true" ]]; then
+    header "Provisioning AirVibe device profiles"
+    if bash "$SCRIPT_DIR/scripts/provision-devices.sh"; then
+        success "AirVibe device profiles ready"
+    else
+        warn "Device profile provisioning failed — run manually after setup:"
+        warn "  bash scripts/provision-devices.sh"
+        warn "(Requires: sudo apt-get install curl jq)"
+    fi
+fi
+
+# ── Step 16: Print summary ───────────────────────────────────────────────────
 if [[ "$SSL_ENABLED" == "true" ]]; then
     BASE_URL="https://${DOMAIN}"
 else
@@ -469,9 +481,10 @@ echo "  3001/tcp (Basics Station WebSocket)"
 echo ""
 echo -e "${BOLD}Next steps:${NC}"
 echo "  1. Log in to the web UI with the credentials above"
-echo "  2. Add a Network Server gateway (Gateways → Add gateway)"
-echo "  3. Create a Device Profile matching your sensor's LoRaWAN version"
-echo "  4. Create an Application and register your devices"
+echo "  2. Add a gateway (Gateways → Add gateway)"
+echo "  3. Create an Application and register your AirVibe devices"
+echo "     Device profiles 'AirVibe ${LORA_REGION}' and 'AirVibe ${LORA_REGION} FUOTA' are pre-provisioned."
+echo "     Use the FUOTA profile only when running a firmware update session."
 echo ""
 echo "  Logs:       docker compose logs -f chirpstack"
 echo "  Stop stack: docker compose down"
