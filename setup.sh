@@ -329,7 +329,7 @@ docker run --rm \
     -v "$SCRIPT_DIR/generated/mosquitto/passwd:/mosquitto/config/passwd" \
     eclipse-mosquitto:2.0.22 \
     sh -c "mosquitto_passwd -b -c /mosquitto/config/passwd chirpstack '${MOSQUITTO_PASSWORD}'"
-chmod 644 "$SCRIPT_DIR/generated/mosquitto/passwd"
+chmod 600 "$SCRIPT_DIR/generated/mosquitto/passwd"
 success "Mosquitto passwd file created"
 
 # ── Step 12: SSL certificate (VPS mode) ──────────────────────────────────────
@@ -370,7 +370,7 @@ if [[ "$SSL_ENABLED" == "true" ]]; then
     # Set up auto-renewal cron (if crontab is available)
     if command -v crontab &>/dev/null; then
         CRON_CMD="0 3 * * * ${SCRIPT_DIR}/scripts/renew-ssl.sh >> /var/log/chirpstack-ssl-renew.log 2>&1"
-        ( crontab -l 2>/dev/null | grep -v "renew-ssl.sh"; echo "$CRON_CMD" ) | crontab -
+        ( crontab -l 2>/dev/null | grep -v "renew-ssl.sh" || true; echo "$CRON_CMD" ) | crontab -
         success "Auto-renewal cron job added (daily at 03:00)"
     else
         warn "crontab not available — remember to schedule scripts/renew-ssl.sh to run periodically."
