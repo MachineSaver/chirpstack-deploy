@@ -53,6 +53,21 @@ fi
 success "Docker $(docker --version | awk '{print $3}' | tr -d ',')"
 success "Docker Compose $(docker compose version --short)"
 
+if [[ -f .env ]]; then
+    header "Existing configuration detected"
+    warn ".env already exists. Re-running setup will generate new secrets."
+    warn "Use scripts/generate-config.sh if you only need to re-render config files."
+    echo ""
+    read -rp "  Type OVERWRITE to replace .env, or press Enter to exit: " OVERWRITE_CONFIRM
+    if [[ "$OVERWRITE_CONFIRM" != "OVERWRITE" ]]; then
+        info "Setup cancelled. Existing .env was left unchanged."
+        exit 0
+    fi
+    ENV_BACKUP=".env.$(date -u +%Y%m%d%H%M%S).bak"
+    cp .env "$ENV_BACKUP"
+    success "Backed up existing .env to ${ENV_BACKUP}"
+fi
+
 # ── Step 2: Deployment type ──────────────────────────────────────────────────
 header "Deployment type"
 echo "  [1] VPS with domain name  (HTTPS via Let's Encrypt — recommended for internet-facing servers)"

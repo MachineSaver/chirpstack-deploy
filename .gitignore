@@ -1,6 +1,8 @@
 # Generated secrets and runtime configs (produced by setup.sh / generate-config.sh)
 .env
+.env.*.bak
 generated/
+backups/
 
 # Docker volumes (if bind-mounted locally)
 data/
