@@ -22,10 +22,21 @@ fi
 
 echo "Renewing certificates for ${DOMAIN}..."
 
+CERTBOT_CERTS_VOLUME="chirpstack_certbot_certs"
+CERTBOT_WWW_VOLUME="chirpstack_certbot_www"
+
+for volume in "$CERTBOT_CERTS_VOLUME" "$CERTBOT_WWW_VOLUME"; do
+    if ! docker volume inspect "$volume" >/dev/null 2>&1; then
+        echo "ERROR: Docker volume not found: $volume" >&2
+        echo "Run ./setup.sh in VPS mode before renewing certificates." >&2
+        exit 1
+    fi
+done
+
 docker run --rm \
-    -v "$(docker volume ls -q | grep certbot_certs || echo chirpstack_certbot_certs):/etc/letsencrypt" \
-    -v "$(docker volume ls -q | grep certbot_www || echo chirpstack_certbot_www):/var/www/certbot" \
-    certbot/certbot renew --webroot -w /var/www/certbot --quiet
+    -v "${CERTBOT_CERTS_VOLUME}:/etc/letsencrypt" \
+    -v "${CERTBOT_WWW_VOLUME}:/var/www/certbot" \
+    certbot/certbot:v5.5.0 renew --webroot -w /var/www/certbot --quiet
 
 echo "Reloading Nginx..."
 docker compose -f "$ROOT/docker-compose.yml" exec nginx nginx -s reload
