@@ -46,17 +46,6 @@ Add a GitHub Actions workflow that runs the validation script on pull requests.
 
 Expected benefit: catch deployment, template, and syntax regressions before merge.
 
-### Expand region support as a first-class module
-
-The repository currently supports US915 and EU868. Future regions should be easy to add without editing multiple unrelated files.
-
-Suggested direction:
-
-- Keep one region config per file.
-- Derive MQTT topics from the selected region.
-- Document region-specific gateway setup notes.
-- Add validation that selected region ids match available region files.
-
 ### Harden operational security defaults
 
 Review exposed ports and credential handling for internet-facing deployments.
@@ -99,3 +88,7 @@ Mosquitto now stays internal by default. Host port `1883` is exposed only throug
 ### Harden admin and SSL setup paths
 
 Admin setup now avoids guessed container names and verifies the admin email update. SSL renewal now uses deterministic Compose volume names instead of broad Docker volume matching.
+
+### Make region support module-based
+
+US915 and EU868 now live under `config/regions/<region-id>/` with tracked metadata, ChirpStack TOML, and Basics Station concentrator TOML. Setup builds its menu from those modules, config generation renders from the selected module, and validation renders every discovered module automatically.

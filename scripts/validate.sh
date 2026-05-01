@@ -121,6 +121,114 @@ restore() {
 
 trap restore EXIT
 
+REGION_IDS=()
+REGION_NAMES=()
+
+load_region_metadata() {
+    local region_dir="$1"
+    local metadata="$region_dir/metadata.env"
+
+    REGION_ID=""
+    REGION_NAME=""
+    REGION_DISPLAY_NAME=""
+    REGION_SETUP_DESCRIPTION=""
+    REGION_MENU_ORDER=""
+    BS_REGION=""
+    BS_FREQ_MIN=""
+    BS_FREQ_MAX=""
+
+    if [[ ! -f "$metadata" ]]; then
+        return 1
+    fi
+
+    # shellcheck disable=SC1090
+    source "$metadata"
+}
+
+validate_region_modules() {
+    local dir region_id
+    local required_vars=(
+        REGION_ID
+        REGION_NAME
+        REGION_DISPLAY_NAME
+        REGION_SETUP_DESCRIPTION
+        REGION_MENU_ORDER
+        BS_REGION
+        BS_FREQ_MIN
+        BS_FREQ_MAX
+    )
+
+    REGION_IDS=()
+    REGION_NAMES=()
+
+    for dir in "$ROOT"/config/regions/*; do
+        [[ -d "$dir" ]] || continue
+
+        if ! load_region_metadata "$dir"; then
+            fail "region module metadata: $(basename "$dir")"
+            continue
+        fi
+
+        region_id="$(basename "$dir")"
+        local valid=true
+        local var_name
+        for var_name in "${required_vars[@]}"; do
+            if [[ -z "${!var_name:-}" ]]; then
+                fail "region metadata $(basename "$dir"): missing $var_name"
+                valid=false
+            fi
+        done
+        if [[ "$valid" != "true" ]]; then
+            continue
+        fi
+
+        if [[ "$REGION_ID" != "$region_id" ]]; then
+            fail "region metadata $(basename "$dir"): REGION_ID does not match directory"
+            continue
+        fi
+        if [[ ! "$REGION_MENU_ORDER" =~ ^[0-9]+$ ]]; then
+            fail "region metadata $region_id: REGION_MENU_ORDER must be numeric"
+            continue
+        fi
+        if [[ ! "$BS_FREQ_MIN" =~ ^[0-9]+$ || ! "$BS_FREQ_MAX" =~ ^[0-9]+$ ]]; then
+            fail "region metadata $region_id: frequency bounds must be numeric"
+            continue
+        fi
+        if (( BS_FREQ_MIN >= BS_FREQ_MAX )); then
+            fail "region metadata $region_id: BS_FREQ_MIN must be lower than BS_FREQ_MAX"
+            continue
+        fi
+        if [[ ! -f "$dir/chirpstack.toml" ]]; then
+            fail "region module $region_id: missing chirpstack.toml"
+            continue
+        fi
+        if ! grep -Eq "id[[:space:]]*=[[:space:]]*\"${region_id}\"" "$dir/chirpstack.toml"; then
+            fail "region module $region_id: chirpstack.toml id mismatch"
+            continue
+        fi
+        if ! grep -Eq "name[[:space:]]*=[[:space:]]*\"${BS_REGION}\"" "$dir/chirpstack.toml"; then
+            fail "region module $region_id: chirpstack.toml band name mismatch"
+            continue
+        fi
+        if [[ ! -s "$dir/basics-station-concentrators.toml" ]]; then
+            fail "region module $region_id: missing Basics Station concentrator TOML"
+            continue
+        fi
+        if ! grep -Fq '[[backend.basic_station.concentrators]]' "$dir/basics-station-concentrators.toml"; then
+            fail "region module $region_id: Basics Station concentrator block missing"
+            continue
+        fi
+
+        REGION_IDS+=("$region_id")
+        REGION_NAMES+=("$REGION_NAME")
+        ok "region module: $region_id"
+    done
+
+    if [[ "${#REGION_IDS[@]}" -eq 0 ]]; then
+        fail "no valid region modules found"
+    fi
+}
+
 # ── 1. Shell linting ─────────────────────────────────────────────────────────
 section "Shell linting"
 
@@ -142,7 +250,12 @@ else
     skip "shellcheck not installed (apt-get install shellcheck)"
 fi
 
-# ── 2. Template rendering ─────────────────────────────────────────────────────
+# ── 2. Region modules ────────────────────────────────────────────────────────
+section "Region modules"
+
+validate_region_modules
+
+# ── 3. Template rendering ─────────────────────────────────────────────────────
 section "Template rendering"
 
 stash
@@ -182,22 +295,69 @@ ENV
 }
 
 render() {
-    local label="$1"
+    local label="$1" region_id="$2"
     local out
     if out=$(bash "$ROOT/scripts/generate-config.sh" 2>&1); then
         ok "render: $label"
+        validate_rendered_region "$region_id"
     else
         fail "render: $label"
         printf '%s\n' "$out" >&2
     fi
 }
 
-write_env US915 false false;                   render "US915 / local / no-monitoring"
-write_env EU868 false false;                   render "EU868 / local / no-monitoring"
-write_env US915 true  true  cs.example.com;    render "US915 / vps  / monitoring"
-write_env EU868 true  true  cs.example.com;    render "EU868 / vps  / monitoring"
+validate_rendered_region() {
+    local region_id="$1"
+    local region_dir="$ROOT/config/regions/$region_id"
+    local chirpstack="$ROOT/generated/chirpstack/chirpstack.toml"
+    local region="$ROOT/generated/chirpstack/region.toml"
+    local bs="$ROOT/generated/gateway-bridge/bs.toml"
+    local expected_concentrators rendered_concentrators
 
-# ── 3. YAML syntax ───────────────────────────────────────────────────────────
+    load_region_metadata "$region_dir"
+
+    if grep -Fq "\"${region_id}\"" "$chirpstack"; then
+        ok "rendered enabled region: $region_id"
+    else
+        fail "rendered enabled region: $region_id"
+    fi
+    if grep -Fq "event_topic=\"${region_id}/gateway/+/event/+\"" "$region" &&
+        grep -Fq "state_topic=\"${region_id}/gateway/+/state/+\"" "$region" &&
+        grep -Fq "command_topic=\"${region_id}/gateway/{{gateway_id}}/command/{{command_type}}\"" "$region"; then
+        ok "rendered MQTT topics: $region_id"
+    else
+        fail "rendered MQTT topics: $region_id"
+    fi
+    if grep -Fq "region=\"${BS_REGION}\"" "$bs" &&
+        grep -Fq "frequency_min=${BS_FREQ_MIN}" "$bs" &&
+        grep -Fq "frequency_max=${BS_FREQ_MAX}" "$bs"; then
+        ok "rendered Basics Station metadata: $region_id"
+    else
+        fail "rendered Basics Station metadata: $region_id"
+    fi
+    expected_concentrators="$(mktemp)"
+    rendered_concentrators="$(mktemp)"
+    sed -n '/^\[\[backend.basic_station.concentrators\]\]/,$p' \
+        "$region_dir/basics-station-concentrators.toml" | sed '/^$/d' > "$expected_concentrators"
+    sed -n '/^\[\[backend.basic_station.concentrators\]\]/,/^\[integration\]/{/^\[integration\]/!p}' \
+        "$bs" | sed '/^$/d' > "$rendered_concentrators"
+    if cmp -s "$expected_concentrators" "$rendered_concentrators"; then
+        ok "rendered Basics Station concentrators: $region_id"
+    else
+        fail "rendered Basics Station concentrators: $region_id"
+    fi
+    rm -f "$expected_concentrators" "$rendered_concentrators"
+}
+
+for idx in "${!REGION_IDS[@]}"; do
+    write_env "${REGION_NAMES[$idx]}" false false
+    render "${REGION_NAMES[$idx]} / local / no-monitoring" "${REGION_IDS[$idx]}"
+
+    write_env "${REGION_NAMES[$idx]}" true true cs.example.com
+    render "${REGION_NAMES[$idx]} / vps  / monitoring" "${REGION_IDS[$idx]}"
+done
+
+# ── 4. YAML syntax ───────────────────────────────────────────────────────────
 section "YAML syntax"
 
 validate_yaml() {
@@ -288,7 +448,7 @@ else
     skip "python3 + pyyaml not available (pip install pyyaml)"
 fi
 
-# ── 4. Docker Compose config validation ──────────────────────────────────────
+# ── 5. Docker Compose config validation ──────────────────────────────────────
 section "Docker Compose config"
 
 if command -v docker &>/dev/null && docker compose version &>/dev/null 2>&1; then

@@ -5,7 +5,7 @@ A self-contained, production-ready deployment of [ChirpStack v4](https://www.chi
 **Supports:**
 - VPS with a domain name (HTTPS via Let's Encrypt)
 - Local network / home lab (plain HTTP, no domain needed)
-- US915 (Americas) and EU868 (Europe) frequency regions
+- US915 (Americas) and EU868 (Europe) frequency region modules
 - Semtech UDP and Basics Station gateway protocols
 - Optional Grafana monitoring stack with PostgreSQL gateway state and InfluxDB traffic charts
 
@@ -242,7 +242,7 @@ flowchart TD
     C -->|VPS| D[Prompt: domain name\n+ Let's Encrypt email]
     C -->|Local| E[Skip domain config]
     D --> F
-    E --> F[Choose LoRa region\nUS915 or EU868]
+    E --> F[Choose LoRa region\nfrom config/regions]
     F --> G[Enter admin email]
     G --> V{Expose MQTT\non host?}
     V -->|Yes| W[Include docker-compose.mqtt.yml\nwhen starting stack]
@@ -273,7 +273,7 @@ flowchart TD
 | 1 | Deployment type | VPS with domain / Local network |
 | 2 | Domain name | *(VPS only)* e.g. `chirpstack.example.com` |
 | 3 | Let's Encrypt email | *(VPS only)* for cert expiry notices |
-| 4 | LoRa region | US915 (Americas) / EU868 (Europe) |
+| 4 | LoRa region | Discovered from `config/regions/` (`US915` or `EU868` by default) |
 | 5 | Admin email address | your login for the web UI |
 | 6 | Expose MQTT on the host? | Optional direct access for external MQTT clients |
 | 7 | Enable monitoring? | Grafana + InfluxDB |
@@ -318,7 +318,7 @@ Gateway cert:   (leave blank — no mutual TLS required)
 Gateway key:    (leave blank)
 ```
 
-> **Note:** The Basics Station bridge sends a `ROUTER_CONFIG` to the gateway on connect. This contains the channel plan for your region (US915 sub-band 2 or EU868 standard plan), generated automatically from your `LORA_REGION` setting. If your gateway hardware uses a different sub-band or non-standard channel plan, edit `config/gateway-bridge/bs.toml.tmpl` and re-run `bash scripts/generate-config.sh`.
+> **Note:** The Basics Station bridge sends a `ROUTER_CONFIG` to the gateway on connect. This contains the channel plan from your selected region module, generated automatically from `LORA_REGION`. If your gateway hardware uses a different sub-band or non-standard channel plan, edit the matching `config/regions/<region-id>/basics-station-concentrators.toml` and `chirpstack.toml`, then re-run `bash scripts/generate-config.sh`.
 
 ### Step 3 — Verify connection
 
@@ -466,7 +466,7 @@ docker compose up -d --force-recreate chirpstack
 | `DEPLOY_MODE` | `local` | `vps` enables SSL; `local` uses plain HTTP |
 | `DOMAIN` | *(blank)* | Domain name for VPS mode |
 | `SSL_ENABLED` | `false` | Set automatically by setup.sh |
-| `LORA_REGION` | `US915` | `US915` or `EU868` |
+| `LORA_REGION` | `US915` | Region selector. `US915` and `EU868` are included; values map to `config/regions/<region-id>/`. |
 | `POSTGRES_PASSWORD` | *(generated)* | PostgreSQL password |
 | `REDIS_PASSWORD` | *(generated)* | Redis password |
 | `MOSQUITTO_PASSWORD` | *(generated)* | Internal MQTT password |
@@ -501,7 +501,13 @@ docker compose restart chirpstack
 
 > **Note:** Changing region will affect all existing gateways and devices. Reconfigure your gateway hardware to use the new region frequency plan.
 
-Region config files are in `config/chirpstack/regions/`. They can be edited to customise channel plans (e.g., US915 sub-band selection).
+Region modules are in `config/regions/<region-id>/`. Each module contains:
+
+- `metadata.env` - setup menu labels and Basics Station frequency bounds
+- `chirpstack.toml` - the ChirpStack `[[regions]]` block
+- `basics-station-concentrators.toml` - the Basics Station channel plan sent in `ROUTER_CONFIG`
+
+To customize a channel plan, edit the files inside the matching module and run `bash scripts/validate.sh`. Validation discovers every module automatically.
 
 ---
 
@@ -647,10 +653,17 @@ chirpstack-deploy/
 │
 ├── config/                               ← Source templates and static config (tracked in git)
 │   ├── chirpstack/
-│   │   ├── chirpstack.toml.tmpl          ← ChirpStack config template
-│   │   └── regions/
-│   │       ├── us915.toml                ← US915 region parameters
-│   │       └── eu868.toml                ← EU868 region parameters
+│   │   └── chirpstack.toml.tmpl          ← ChirpStack config template
+│   │
+│   ├── regions/
+│   │   ├── us915/
+│   │   │   ├── metadata.env              ← Setup labels + Basics Station bounds
+│   │   │   ├── chirpstack.toml           ← US915 region parameters
+│   │   │   └── basics-station-concentrators.toml
+│   │   └── eu868/
+│   │       ├── metadata.env              ← Setup labels + Basics Station bounds
+│   │       ├── chirpstack.toml           ← EU868 region parameters
+│   │       └── basics-station-concentrators.toml
 │   │
 │   ├── gateway-bridge/
 │   │   ├── udp.toml                      ← Semtech UDP bridge config (static)

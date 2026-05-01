@@ -1,6 +1,6 @@
 [[regions]]
 
-  # US915 — Sub-band 2 (channels 8-15 + 65), the most common for US deployments.
+  # US915 - Sub-band 2 (channels 8-15 + 65), the most common for US deployments.
   # Compatible with TTN, Helium, and most US gateway defaults.
   id="us915"
   description="US915"
@@ -38,5 +38,5 @@
       max_count_n=0
       max_time_n=0
 
-    # Sub-band 2: channels 8–15 are the standard 8-channel plan used by most US gateways
+    # Sub-band 2: channels 8-15 are the standard 8-channel plan used by most US gateways
     enabled_uplink_channels=[8, 9, 10, 11, 12, 13, 14, 15]
