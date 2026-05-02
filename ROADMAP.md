@@ -51,6 +51,21 @@ Areas to consider:
 - Whether generated credentials should be printed only once or stored in a separate local credentials note.
 - Whether file permissions for generated secrets should be stricter.
 
+### Add gateway-specific certificate support
+
+Support optional per-gateway mutual TLS for Basics Station deployments in unpredictable or untrusted network environments.
+
+Current gateway provisioning can start with server TLS validation only, using `wss://` and a trusted server CA. For production fleets deployed globally, add a hardened mode where each gateway receives its own client certificate and private key, and the Gateway Bridge verifies that certificate before accepting Basic Station traffic.
+
+Expected capabilities:
+
+- Generate or import a unique client certificate/key pair per gateway.
+- Install the gateway certificate, key, and server trust material during provisioning.
+- Record enough certificate metadata to rotate or revoke individual gateways without affecting the whole fleet.
+- Keep non-mutual-TLS provisioning available for lab and controlled-network deployments.
+
+Expected benefit: reduce the risk that a party on an uncontrolled network can impersonate a gateway by reusing or guessing a gateway EUI.
+
 ### Add upgrade documentation
 
 Document how to update container images, back up volumes, restore data, rotate credentials, and change regions safely. Image versions are now pinned to full semver across all Compose files and scripts, so a controlled upgrade path is the next gap.
