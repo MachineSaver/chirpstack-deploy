@@ -239,7 +239,8 @@ if command -v shellcheck &>/dev/null; then
         "$ROOT/scripts/validate.sh" \
         "$ROOT/scripts/renew-ssl.sh" \
         "$ROOT/scripts/backup.sh" \
-        "$ROOT/scripts/restore.sh"; do
+        "$ROOT/scripts/restore.sh" \
+        "$ROOT/scripts/provision-airvibe-sensors.sh"; do
         if shellcheck "$f"; then
             ok "shellcheck $(basename "$f")"
         else
