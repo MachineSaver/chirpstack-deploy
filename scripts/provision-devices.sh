@@ -45,17 +45,18 @@ if [[ ! -f "$CODEC_FILE" ]]; then
 fi
 
 # ── API base URL ──────────────────────────────────────────────────────────────
-# ChirpStack is not exposed directly — reach it through Nginx.
-# In VPS (SSL) mode, call the real domain; in local mode, call localhost.
-if [[ "${SSL_ENABLED:-false}" == "true" ]]; then
-    _port="${HTTPS_PORT:-443}"
-    if [[ "$_port" == "443" ]]; then
-        API_BASE="https://${DOMAIN}/api"
-    else
-        API_BASE="https://${DOMAIN}:${_port}/api"
-    fi
+# Call the REST API container directly via its Docker bridge IP.
+# This avoids routing through Nginx (which the host can't reach via its own
+# external domain due to hairpin NAT) and avoids Nginx DNS caching issues.
+REST_API_IP=$(docker compose ps -q chirpstack-rest-api 2>/dev/null | \
+    xargs -r docker inspect --format \
+    '{{range .NetworkSettings.Networks}}{{.IPAddress}}{{break}}{{end}}' 2>/dev/null)
+
+if [[ -n "$REST_API_IP" ]]; then
+    API_BASE="http://${REST_API_IP}:8090/api"
 else
-    API_BASE="http://127.0.0.1:${HTTP_PORT:-80}/api"
+    error "Could not find chirpstack-rest-api container. Is the stack running?"
+    exit 1
 fi
 
 # ── Authenticate ──────────────────────────────────────────────────────────────
