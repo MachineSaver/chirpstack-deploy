@@ -55,7 +55,7 @@ tar -C "$WORKDIR" -xzf "$BACKUP_ARCHIVE"
 [[ -f "$WORKDIR/files/generated.tar.gz" ]] || die "generated config payload missing from backup"
 [[ -f "$WORKDIR/postgres.dump" ]] || die "postgres.dump missing from backup"
 
-# shellcheck disable=SC1090
+# shellcheck source=/dev/null
 source "$WORKDIR/manifest.env"
 [[ "${BACKUP_FORMAT:-}" == "chirpstack-compose-v1" ]] || die "unsupported backup format: ${BACKUP_FORMAT:-unknown}"
 
@@ -80,8 +80,10 @@ chmod 600 "$ROOT/.env"
 rm -rf "$ROOT/generated"
 tar -C "$ROOT" -xzf "$WORKDIR/files/generated.tar.gz"
 
+set -a
 # shellcheck disable=SC1091
-set -a; source "$ROOT/.env"; set +a
+source "$ROOT/.env"
+set +a
 
 COMPOSE_FILES=(-f "$ROOT/docker-compose.yml")
 if [[ "${EXPOSE_MQTT:-false}" == "true" ]]; then
@@ -134,8 +136,7 @@ remove_volume_if_archived() {
 }
 
 wait_for_postgres() {
-    local i
-    for i in {1..60}; do
+    for _ in {1..60}; do
         if dc exec -T postgres pg_isready -U "$POSTGRES_USER" -d "$POSTGRES_DB" >/dev/null 2>&1; then
             return 0
         fi

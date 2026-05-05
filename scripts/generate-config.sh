@@ -11,8 +11,10 @@ if [[ ! -f "$ROOT/.env" ]]; then
     exit 1
 fi
 
+set -a
 # shellcheck disable=SC1091
-set -a; source "$ROOT/.env"; set +a
+source "$ROOT/.env"
+set +a
 
 # ── Region module ───────────────────────────────────────────────────────────
 LORA_REGION_ID="${LORA_REGION,,}"   # e.g. US915 -> us915
@@ -34,7 +36,7 @@ for required_file in "$REGION_METADATA" "$REGION_FILE" "$REGION_CONCENTRATORS_FI
     fi
 done
 
-# shellcheck disable=SC1090
+# shellcheck source=/dev/null
 source "$REGION_METADATA"
 
 required_region_vars=(
@@ -53,6 +55,7 @@ for var_name in "${required_region_vars[@]}"; do
         exit 1
     fi
 done
+# shellcheck disable=SC2153
 if [[ "$REGION_ID" != "$LORA_REGION_ID" ]]; then
     echo "ERROR: Region metadata REGION_ID=$REGION_ID does not match directory $LORA_REGION_ID" >&2
     exit 1
@@ -131,7 +134,7 @@ cat >> "$ROOT/generated/chirpstack/region.toml" << TOML
       [regions.gateway.backend.mqtt]
         event_topic="${LORA_REGION_ID}/gateway/+/event/+"
         state_topic="${LORA_REGION_ID}/gateway/+/state/+"
-        command_topic="${LORA_REGION_ID}/gateway/{{gateway_id}}/command/{{command_type}}"
+        command_topic="${LORA_REGION_ID}/gateway/{{gateway_id}}/command/{{command}}"
         server="tcp://${MOSQUITTO_USER}:${MOSQUITTO_PASSWORD}@mosquitto:1883"
         qos=0
         clean_session=false
@@ -148,18 +151,18 @@ if [[ "${SSL_ENABLED:-false}" == "true" ]]; then
 else
     NGINX_TMPL="$ROOT/config/nginx/http.conf.tmpl"
 fi
-envsubst '${DOMAIN} ${GATEWAY_BS_PORT}' < "$NGINX_TMPL" \
+envsubst "\${DOMAIN} \${GATEWAY_BS_PORT}" < "$NGINX_TMPL" \
     > "$ROOT/generated/nginx/nginx.conf"
 echo "  [ok] generated/nginx/nginx.conf ($([ "${SSL_ENABLED:-false}" == "true" ] && echo HTTPS || echo HTTP))"
 
 # ── Render Grafana datasources (substitute env vars) ─────────────────────────
 if [[ "${ENABLE_MONITORING:-false}" == "true" ]]; then
-    envsubst '${INFLUXDB_ORG} ${INFLUXDB_BUCKET} ${INFLUXDB_TOKEN}' \
+    envsubst "\${INFLUXDB_ORG} \${INFLUXDB_BUCKET} \${INFLUXDB_TOKEN}" \
         < "$ROOT/config/grafana/provisioning/datasources/influxdb.yml.tmpl" \
         > "$ROOT/generated/grafana/provisioning/datasources/influxdb.yml"
     echo "  [ok] generated/grafana/provisioning/datasources/influxdb.yml"
 
-    envsubst '${POSTGRES_USER} ${POSTGRES_PASSWORD} ${POSTGRES_DB}' \
+    envsubst "\${POSTGRES_USER} \${POSTGRES_PASSWORD} \${POSTGRES_DB}" \
         < "$ROOT/config/grafana/provisioning/datasources/postgres.yml.tmpl" \
         > "$ROOT/generated/grafana/provisioning/datasources/postgres.yml"
     echo "  [ok] generated/grafana/provisioning/datasources/postgres.yml"

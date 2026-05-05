@@ -110,6 +110,10 @@ US915 and EU868 now live under `config/regions/<region-id>/` with tracked metada
 
 `scripts/provision-devices.sh` calls the ChirpStack REST API after `setup.sh` completes to create two device profiles per selected region: `AirVibe <REGION>` (Class C, normal operation) and `AirVibe <REGION> FUOTA` (Class A, for firmware update sessions). The script is idempotent, uses a ChirpStack API key generated via the CLI, and calls the `chirpstack-rest-api` container directly via its Docker bridge IP to avoid hairpin NAT issues on VPS deployments. The AirVibe TS013 payload codec (v2.1.2) is embedded in each profile automatically.
 
+### Fix gateway command topic rendering
+
+`scripts/generate-config.sh` now renders ChirpStack gateway MQTT downlink commands with `{{command}}`, matching ChirpStack v4's per-region backend template. This keeps setup-generated configs publishing join-accept and downlink frames to `REGION/gateway/GATEWAY_ID/command/down`, which the Basic Station gateway bridge forwards to the gateway.
+
 ### Fix Nginx REST API routing
 
 The Nginx config previously routed `/api/` to a `chirpstack-rest-api:8090` upstream but the `chirpstack-rest-api` service was missing from `docker-compose.yml`. Added the `ghcr.io/chirpstack/chirpstack-rest-api:4.2.0` service and confirmed the two-upstream layout (`chirpstack_ui` → `chirpstack:8080` for the web UI, `chirpstack_api` → `chirpstack-rest-api:8090` for the REST API) is correct for ChirpStack v4, which serves gRPC on port 8080 and requires a separate HTTP gateway for REST clients.

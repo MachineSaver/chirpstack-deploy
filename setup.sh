@@ -312,7 +312,7 @@ update_env_file() {
 # Re-load the generated values so later steps can use fixed ports and other
 # values written into .env without hard-coding them again.
 set -a
-# shellcheck disable=SC1090
+# shellcheck source=/dev/null
 source .env
 set +a
 
@@ -340,7 +340,7 @@ if [[ "$SSL_ENABLED" == "true" ]]; then
     # Start Nginx with an HTTP-only config for first issuance. The normal HTTPS
     # config references certificate files that do not exist until Certbot runs.
     export DOMAIN GATEWAY_BS_PORT
-    envsubst '${DOMAIN} ${GATEWAY_BS_PORT}' < "$SCRIPT_DIR/config/nginx/http.conf.tmpl" \
+    envsubst "\${DOMAIN} \${GATEWAY_BS_PORT}" < "$SCRIPT_DIR/config/nginx/http.conf.tmpl" \
         > "$SCRIPT_DIR/generated/nginx/nginx.conf"
 
     if [[ "$ENABLE_MONITORING" == "true" ]]; then
@@ -393,7 +393,7 @@ fi
 # Wait for ChirpStack health endpoint
 info "Waiting for ChirpStack to be ready..."
 READY=false
-for i in $(seq 1 20); do
+for _ in $(seq 1 20); do
     if docker compose exec -T chirpstack wget -qO- http://127.0.0.1:8070/health &>/dev/null; then
         READY=true
         break

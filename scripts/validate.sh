@@ -43,8 +43,10 @@ live_gateway_status() {
         return
     fi
 
+    set -a
     # shellcheck disable=SC1091
-    set -a; source "$ROOT/.env"; set +a
+    source "$ROOT/.env"
+    set +a
 
     local sql result status
     sql="select encode(gateway_id, 'hex') || '|' || name || '|online'
@@ -130,7 +132,9 @@ load_region_metadata() {
 
     REGION_ID=""
     REGION_NAME=""
+    # shellcheck disable=SC2034
     REGION_DISPLAY_NAME=""
+    # shellcheck disable=SC2034
     REGION_SETUP_DESCRIPTION=""
     REGION_MENU_ORDER=""
     BS_REGION=""
@@ -208,6 +212,10 @@ validate_region_modules() {
         fi
         if ! grep -Eq "name[[:space:]]*=[[:space:]]*\"${BS_REGION}\"" "$dir/chirpstack.toml"; then
             fail "region module $region_id: chirpstack.toml band name mismatch"
+            continue
+        fi
+        if ! grep -Eq "common_name[[:space:]]*=[[:space:]]*\"${BS_REGION}\"" "$dir/chirpstack.toml"; then
+            fail "region module $region_id: chirpstack.toml common_name mismatch"
             continue
         fi
         if [[ ! -s "$dir/basics-station-concentrators.toml" ]]; then
@@ -324,7 +332,7 @@ validate_rendered_region() {
     fi
     if grep -Fq "event_topic=\"${region_id}/gateway/+/event/+\"" "$region" &&
         grep -Fq "state_topic=\"${region_id}/gateway/+/state/+\"" "$region" &&
-        grep -Fq "command_topic=\"${region_id}/gateway/{{gateway_id}}/command/{{command_type}}\"" "$region"; then
+        grep -Fq "command_topic=\"${region_id}/gateway/{{gateway_id}}/command/{{command}}\"" "$region"; then
         ok "rendered MQTT topics: $region_id"
     else
         fail "rendered MQTT topics: $region_id"

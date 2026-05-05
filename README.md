@@ -323,7 +323,7 @@ Gateway cert:   (leave blank — no mutual TLS required)
 Gateway key:    (leave blank)
 ```
 
-> **Note:** The Basics Station bridge sends a `ROUTER_CONFIG` to the gateway on connect. This contains the channel plan from your selected region module, generated automatically from `LORA_REGION`. If your gateway hardware uses a different sub-band or non-standard channel plan, edit the matching `config/regions/<region-id>/basics-station-concentrators.toml` and `chirpstack.toml`, then re-run `bash scripts/generate-config.sh`.
+> **Note:** The Basics Station bridge sends a `ROUTER_CONFIG` to the gateway on connect. This contains the channel plan from your selected region module, generated automatically from `LORA_REGION`. Setup also renders ChirpStack's per-region gateway MQTT topics, including `REGION/gateway/{{gateway_id}}/command/{{command}}` for join-accept and downlink commands. If your gateway hardware uses a different sub-band or non-standard channel plan, edit the matching `config/regions/<region-id>/basics-station-concentrators.toml` and `chirpstack.toml`, then re-run `bash scripts/generate-config.sh`.
 
 ### Step 3 — Verify connection
 
@@ -644,6 +644,7 @@ Common causes:
 1. Confirm the **AppKey** in ChirpStack matches the device exactly
 2. Check the **Device Profile** LoRaWAN version matches the device firmware
 3. Check **Live LoRaWAN Frames** on the gateway — if frames appear there but not on the device page, the DevEUI may be wrong
+4. If ChirpStack publishes joins but the gateway bridge logs `unexpected command received` on a topic ending in `/command/`, re-run `bash scripts/generate-config.sh` and restart ChirpStack. The rendered region config must use `command/{{command}}`, not an empty command suffix.
 
 ### MQTT connection refused
 

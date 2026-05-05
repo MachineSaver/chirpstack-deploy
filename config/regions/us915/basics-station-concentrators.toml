@@ -1,19 +1,19 @@
-# US915 sub-band 2: channels 8-15 (125kHz) + channel 65 (500kHz)
+# US915 sub-band 1: channels 0-7 (125kHz) + channel 64 (500kHz)
 [[backend.basic_station.concentrators]]
 
   [backend.basic_station.concentrators.multi_sf]
     frequencies=[
-      903900000,
-      904100000,
-      904300000,
-      904500000,
-      904700000,
-      904900000,
-      905100000,
-      905300000,
+      902300000,
+      902500000,
+      902700000,
+      902900000,
+      903100000,
+      903300000,
+      903500000,
+      903700000,
     ]
 
   [backend.basic_station.concentrators.lora_std]
-    frequency=904600000
+    frequency=903000000
     bandwidth=500000
     spreading_factor=8

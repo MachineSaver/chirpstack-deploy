@@ -132,6 +132,16 @@ Fix: added the `chirpstack-rest-api` service, proxied `/api/` to it, switched pr
 
 `generate-config.sh` now derives `LORA_REGION_ID` from the selected region and injects it into `event_topic`, `state_topic`, and `command_topic` in the rendered `region.toml`.
 
+### Gateway join-accept downlinks can render an empty MQTT command suffix
+
+- **Area:** `scripts/generate-config.sh`
+- **Severity:** High
+- **Status:** Fixed
+
+The generated ChirpStack region config used `{{command_type}}` in `regions.gateway.backend.mqtt.command_topic`. Current ChirpStack renders the command placeholder as `{{command}}`, so join-accept downlinks were published to `REGION/gateway/GATEWAY_ID/command/` with no command name. The Basic Station gateway bridge subscribes to `REGION/gateway/GATEWAY_ID/command/#` but expects concrete command names like `down`, so it logged `unexpected command received` and did not forward join-accept downlinks to the gateway.
+
+Fix: `generate-config.sh` now renders `command_topic="REGION/gateway/{{gateway_id}}/command/{{command}}"`, and `validate.sh` checks the generated topic so future setup runs catch regressions.
+
 ### Grafana datasource provisioning may create duplicate or invalid datasource files
 
 - **Area:** `scripts/generate-config.sh`, `config/grafana/provisioning/datasources/influxdb.yml`, `docker-compose.monitoring.yml`

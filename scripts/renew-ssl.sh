@@ -12,8 +12,10 @@ if [[ ! -f "$ROOT/.env" ]]; then
     exit 1
 fi
 
+set -a
 # shellcheck disable=SC1091
-set -a; source "$ROOT/.env"; set +a
+source "$ROOT/.env"
+set +a
 
 if [[ "${SSL_ENABLED:-false}" != "true" ]]; then
     echo "SSL is not enabled — nothing to renew."

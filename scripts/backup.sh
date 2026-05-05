@@ -36,8 +36,10 @@ fi
 
 require_cmd docker
 
+set -a
 # shellcheck disable=SC1091
-set -a; source "$ROOT/.env"; set +a
+source "$ROOT/.env"
+set +a
 
 COMPOSE_FILES=(-f "$ROOT/docker-compose.yml")
 if [[ "${EXPOSE_MQTT:-false}" == "true" ]]; then
