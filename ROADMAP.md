@@ -70,6 +70,24 @@ Expected benefit: reduce the risk that a party on an uncontrolled network can im
 
 Document how to update container images, back up volumes, restore data, rotate credentials, and change regions safely. Image versions are now pinned to full semver across all Compose files and scripts, so a controlled upgrade path is the next gap.
 
+### Add Cloudgate fleet telemetry
+
+Turn the Cloudgate statistics research in `docs/cloudgate-statistics.md` into a
+separate collector and Grafana dashboard. Keep gateway provisioning focused on
+registration and Basics Station configuration, store recurring Cloudgate
+runtime data in InfluxDB, and use ChirpStack/PostgreSQL only for gateway
+identity and slower-changing inventory metadata.
+
+Expected capabilities:
+
+- Collect Cloudgate inventory, firmware/image/config versions, cellular state,
+  signal quality, GPS state, VPN state, Basic Station health, resource usage,
+  interface counters, and useful log-derived RF statistics.
+- Support a read-only SSH collector first, then add authenticated Cloudgate web
+  API collection for structured modem, SIM, system, and event data.
+- Add a dedicated `cloudgate-fleet.json` Grafana dashboard without embedding
+  collection logic in dashboard JSON.
+
 ## Later
 
 ### Add smoke tests
